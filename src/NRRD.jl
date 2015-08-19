@@ -85,6 +85,7 @@ function FileIO.load(f::File{format"NRRD"}; mmap=:auto)
     close(st)
     nrrd
 end
+
 function FileIO.load(io::Stream{format"NRRD"}; mmap=:auto)
     io = stream(io)
     version = ascii(read(io, Uint8, 4))
