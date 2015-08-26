@@ -1,7 +1,6 @@
 module NRRD
 
 using Images, SIUnits, SIUnits.ShortUnits, Compat, FileIO
-import Images: imread, imwrite
 import Zlib
 import FixedPointNumbers
 

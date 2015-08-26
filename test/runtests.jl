@@ -2,6 +2,7 @@ using NRRD
 using FactCheck, Images, ColorTypes, FixedPointNumbers, FileIO
 
 testing_units = Int == Int64
+
 if testing_units
     using SIUnits, SIUnits.ShortUnits
 end
