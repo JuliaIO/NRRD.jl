@@ -8,6 +8,6 @@ julia:
 notifications:
   email: false
 script:
-- julia -e 'Pkg.clone("https://github.com/JuliaIO/FileIO.jl.git"); Pkg.clone("https://github.com/JuliaIO/NRRD.jl.git"); Pkg.checkout("Images", "sd/fileio"); Pkg.clone("https://github.com/JuliaGraphics/ColorVectorSpace.jl.git")'
+- julia -e 'Pkg.clone("https://github.com/JuliaIO/FileIO.jl.git"); Pkg.clone("https://github.com/JuliaIO/NRRD.jl.git"); Pkg.checkout("Images", "sd/fileio"); Pkg.clone("https://github.com/JuliaGraphics/Colors.jl.git"); Pkg.clone("https://github.com/JuliaGraphics/ColorVectorSpace.jl.git")'
 - julia --check-bounds=yes --color=yes -e 'Pkg.test("NRRD", coverage=true)'
 - julia -e 'cd(Pkg.dir("NRRD")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(process_folder()); Codecov.submit(process_folder())'
