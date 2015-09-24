@@ -225,7 +225,7 @@ function FileIO.load(io::Stream{format"NRRD"}; mmap=:auto)
         spacedim = int(header["space dimension"])
         spacedim == sum(isspatial) || error("spacedim $spacedim disagrees with isspatial=$isspatial")
     end
-    units = Array(Union{SIUnits.SIUnit,SIUnits.SIQuantity}, 0)
+    units = Array(@compat(Union{SIUnits.SIUnit,SIUnits.SIQuantity}), 0)
     if haskey(header, "space units")
         ustrs = parse_vector_strings(header["space units"])
         length(ustrs) == spacedim || error("parsing of space units: $(header["space units"]) is inconsistent with $spacedim space dimensions")
