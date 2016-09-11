@@ -88,7 +88,7 @@ end
 
 function FileIO.load(io::Stream{format"NRRD"}; mmap=:auto)
     io = stream(io)
-    version = ascii(String(read(io, UInt8, 4)))
+    version = ascii(Compat.String(read(io, UInt8, 4)))
     skipchars(io,isspace)
     header = Dict{ASCIIString, UTF8String}()
     props = Dict{ASCIIString, Any}()
