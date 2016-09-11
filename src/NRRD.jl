@@ -3,6 +3,7 @@ module NRRD
 using Images, SIUnits, SIUnits.ShortUnits, Compat, FileIO
 import Zlib
 import FixedPointNumbers
+import Compat: ASCIIString, UTF8String
 
 typedict = @compat Dict(
     "signed char" => Int8,
@@ -87,7 +88,7 @@ end
 
 function FileIO.load(io::Stream{format"NRRD"}; mmap=:auto)
     io = stream(io)
-    version = ascii(read(io, UInt8, 4))
+    version = ascii(String(read(io, UInt8, 4)))
     skipchars(io,isspace)
     header = Dict{ASCIIString, UTF8String}()
     props = Dict{ASCIIString, Any}()
@@ -222,7 +223,7 @@ function FileIO.load(io::Stream{format"NRRD"}; mmap=:auto)
         spacedim = spacedimdict[lowercase(header["space"])]
         spacedim == sum(isspatial) || error("spacedim $spacedim disagrees with isspatial=$isspatial")
     elseif haskey(header, "space dimension")
-        spacedim = int(header["space dimension"])
+        spacedim = parse(Int, header["space dimension"])
         spacedim == sum(isspatial) || error("spacedim $spacedim disagrees with isspatial=$isspatial")
     end
     units = Array(@compat(Union{SIUnits.SIUnit,SIUnits.SIQuantity}), 0)
@@ -231,10 +232,10 @@ function FileIO.load(io::Stream{format"NRRD"}; mmap=:auto)
         length(ustrs) == spacedim || error("parsing of space units: $(header["space units"]) is inconsistent with $spacedim space dimensions")
         for i = 1:spacedim
             try
-                push!(units, eval(symbol(ustrs[i])))
+                push!(units, eval(Symbol(ustrs[i])))
             catch
                 evalworked = false
-                warn("Could not evaluate unit string $(ustrs[i])")
+                warn("Could not evaluate unit string \"$(ustrs[i])\" for dimension $i")
             end
         end
         if length(units) < spacedim
@@ -302,7 +303,7 @@ function FileIO.save(f::File{format"NRRD"}, img::Image; props::Dict = Dict{ASCII
                                    (T == Float64) ? "double" :
                                    (T == Float16) ? "float16" :
                                    error("Can't write type $T"))
-    elseif eltype(T) <: FixedPointNumbers.UfixedBase
+    elseif eltype(T) <: FixedPointNumbers.UFixed
         # we don't want to write something like "type: ufixedbase{uint8,8}", so fix it
         T = FixedPointNumbers.rawtype(eltype(eltype(img)))
         println(sheader, "type: ", lowercase(string(T)))
