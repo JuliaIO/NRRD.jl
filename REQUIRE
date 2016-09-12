@@ -1,7 +1,7 @@
-julia 0.3
+julia 0.4
 Images
 SIUnits
-Compat
+Compat 0.8.7
 Zlib
 FixedPointNumbers
 FileIO
