@@ -1,7 +1,7 @@
 module NRRD
 
 using Images, SIUnits, SIUnits.ShortUnits, Compat, FileIO
-import Zlib
+import Libz
 import FixedPointNumbers
 import Compat: ASCIIString, UTF8String
 
@@ -126,7 +126,7 @@ function FileIO.load(io::Stream{format"NRRD"}; mmap=:auto)
         sdata = open(joinpath(path, header["datafile"]))
     end
     if in(header["encoding"], ("gzip", "gz"))
-        sdata = Zlib.Reader(sdata)
+        sdata = Libz.ZlibInflateInputStream(sdata)
     end
     # Parse properties and read the data
     nd = parse(Int, header["dimension"])
