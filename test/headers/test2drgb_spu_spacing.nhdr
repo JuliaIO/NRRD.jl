@@ -1,0 +1,13 @@
+NRRD0004
+# Complete NRRD file format specification at:
+# http://teem.sourceforge.net/nrrd/format.html
+type: unsigned char
+dimension: 3
+space dimension: 2
+sizes: 3 5 6
+spacings: nan 2 3.5
+space directions: none none none
+kinds: RGB-color space space
+encoding: raw
+space units: "mm" "μm"
+data file: dummy.raw
