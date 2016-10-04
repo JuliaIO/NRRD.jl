@@ -8,7 +8,7 @@ using FileIO
 import Libz
 import FixedPointNumbers
 
-typedict = Dict(
+string2type = Dict(
     "signed char" => Int8,
     "int8" => Int8,
     "int8_t" => Int8,
@@ -52,7 +52,13 @@ typedict = Dict(
     "double" => Float64
 )
 
-spacedimdict = Dict(
+# The opposite of string2type
+type2string(::Type{Float16}) = "float16"
+type2string(::Type{Float32}) = "float"
+type2string(::Type{Float64}) = "double"
+type2string{T}(::Type{T}) = lowercase(string(T.name.name))
+
+space2axes = Dict(
     "right-anterior-superior" => (3,(:R,:A,:S)),
     "ras" => (3,(:R,:A,:S)),
     "left-anterior-superior" => (3,(:L,:A,:S)),
@@ -73,10 +79,24 @@ spacedimdict = Dict(
     "3d-left-handed-time" => (4,(:xlcs,:ylcs,:zlcs,:time)),
 )
 
+const axes2space = Dict(
+    (:R,:A,:S) => "right-anterior-superior",
+    (:L,:A,:S) => "left-anterior-superior",
+    (:L,:P,:S) => "left-posterior-superior",
+    (:R,:A,:S,:time) => "right-anterior-superior-time",
+    (:L,:A,:S,:time) => "left-anterior-superior-time",
+    (:L,:P,:S,:time) => "left-posterior-superior-time",
+    (:scannerx,:scannery,:scannerz) => "scanner-xyz",
+    (:scannerx,:scannery,:scannerz,:time) => "scanner-xyz-time",
+    (:xrcs,:yrcs,:zrcs) => "3d-right-handed",
+    (:xlcs,:ylcs,:zlcs) => "3d-left-handed",
+    (:xrcs,:yrcs,:zrcs,:time) => "3d-right-handed-time",
+    (:xlcs,:ylcs,:zlcs,:time) => "3d-left-handed-time")
+
 # We put these in a dict so that we don't eval untrusted
 # strings. Please submit PRs to add to this list if you need
 # additional unit support.
-unit_string_dict = Dict("m" => u"m", "mm" => u"mm", "s" => u"s",
+unit_string_dict = Dict("" => 1, "m" => u"m", "mm" => u"mm", "s" => u"s",
                         "um" => u"μm", "μm" => u"μm")
 
 immutable QString end                 # string with quotes around it: "mm"
@@ -123,6 +143,18 @@ const parse_type = Dict(
     "kinds"=>VTuple{String},
 )
 
+const fieldorder = ["content", "type", "dimension", "space", "space dimension",
+                    "sizes", "spacings", "space directions", "kinds",
+                    "centers", "centerings", "thickness",
+                    "axis mins", "axismins", "axis maxs", "axismaxs",
+                    "labels", "units",
+                    "min", "max", "old min", "oldmin", "old max", "oldmax",
+                    "block size", "blocksize", "endian", "encoding",
+                    "space units", "space origin", "measurement frame",
+                    "line skip", "lineskip", "byte skip", "byteskip",
+                    "sample units", "sampleunits",
+                    "data file", "datafile"]
+
 const per_axis = [# orientation-related fields
                   "space directions",
                   # other per-axis fields
@@ -131,6 +163,17 @@ const per_axis = [# orientation-related fields
                   "units", "kinds"]
 
 const per_spacedim = ["space units", "space origin", "measurement frame"]
+
+# version >= n is required if it has any fields in version_reqs[n]
+const version_reqs = ([],
+                      [],   # key/value tested separately,
+                      ["kinds"],
+                      ["thicknesses", "sample units", "space",
+                       "space dimension", "space directions",
+                       "space origin", "space units",
+                       "data file", "datafile"],
+                      ["measurement frame"],
+)
 
 function myendian()
     if ENDIAN_BOM == 0x04030201
@@ -215,99 +258,48 @@ function load(io::Stream{format"NRRD"}; mode="r", mmap=:auto)
         error("\"", header["encoding"], "\" encoding not supported.")
     end
 
-    A = reinterpret(T, A, sz)
+    if perm == ()
+        A = reinterpret(T, A, sz)
+    else
+        A = permuteddimsview(A, perm)
+        if T<:Color
+            A = colorview(T, A)
+        end
+    end
+
     isa(axs, Dims) ? A : AxisArray(A, axs)
 end
 
-function FileIO.save(f::File{format"NRRD"}, img::AbstractArray; props::Dict = Dict{String,Any}())
-    sheader = stream(open(f, "w"))
-    println(sheader, "NRRD0001")
-    # Write the datatype
-    T = get(props, "type", eltype(data(img)))
-    if T<:AbstractFloat
-        println(sheader, "type: ", (T == Float32) ? "float" :
-                                   (T == Float64) ? "double" :
-                                   (T == Float16) ? "float16" :
-                                   error("Can't write type $T"))
-    elseif eltype(T) <: FixedPointNumbers.UFixed
-        # we don't want to write something like "type: ufixedbase{uint8,8}", so fix it
-        T = FixedPointNumbers.rawtype(eltype(eltype(img)))
-        println(sheader, "type: ", lowercase(string(T)))
-    else
-        println(sheader, "type: ", lowercase(string(T)))
+function save(f::File{format"NRRD"}, img::AbstractArray; props::Dict = Dict{String,Any}(), keyvals=nothing, comments=nothing)
+    open(f, "w") do io
+        write(io, magic(format"NRRD"))
+        save(io, img; props=props, keyvals=keyvals, comments=comments)
     end
-    # Extract size and kinds
-    sz = get(props, "sizes", size(img))
-    kinds = ["space" for i = 1:length(sz)]
-    td = timedim(img)
-    if td != 0
-        kinds[td] = "time"
+end
+
+function save{T}(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = Dict{String,Any}(), keyvals=nothing, comments=nothing)
+    axs = axes(img)
+    header = headerinfo(T, axs)
+    # copy fields from props to override those in header
+    for (k, v) in props
+        header[k] = v
     end
-    cd = colordim(img)
-    if cd != 0
-        if colorspace(img) == "RGB"
-            kinds[cd] = "RGB-color"
-        elseif size(img, cd) == 3
-            kinds[cd] = "3-color"
-        else
-            kinds[cd] = "list"
-        end
-    end
-    kinds = get(props, "kinds", kinds)
-    # Write size and kinds
-    println(sheader, "dimension: ", length(sz))
-    print(sheader, "sizes:")
-    for z in sz
-        print(sheader, " ", z)
-    end
-    print(sheader, "\nkinds:")
-    for k in kinds
-        print(sheader, " ", k)
-    end
-    print(sheader, "\n")
-    println(sheader, "encoding: ", get(props, "encoding", "raw"))
-    println(sheader, "endian: ", get(props, "endian", ENDIAN_BOM == 0x04030201 ? "little" : "big"))
-    ps = get(props, "pixelspacing", pixelspacing(img))
-    ps = convert(Vector{Any}, ps)
-    index = sort([cd, td])
-    index[1] > 0 && insert!(ps, index[1], "nan")
-    index[2] > 0 && insert!(ps, index[2], "nan")
-    print(sheader, "spacings:")
-    printunits = false
-    for x in ps
-        if isa(x, SIUnits.SIQuantity)
-            printunits = true
-            print(sheader, " ", x.val)
-        else
-            print(sheader, " ", x)
-        end
-    end
-    print(sheader,"\n")
-    if printunits
-        print(sheader, "space units:")
-        for x in ps
-            if isa(x, SIUnits.SIQuantity)
-                print(sheader," \"", strip(string(SIUnits.unit(x))), "\"")
-            end
-        end
-        print(sheader, "\n")
-    end
+    v = version(header, !(keyvals==nothing || isempty(keyvals)))
+    write_header(io, v, header, keyvals, comments)
     datafilename = get(props, "datafile", "")
     if isempty(datafilename)
         datafilename = get(props, "data file", "")
     end
     if isempty(datafilename)
-        write(sheader, "\n")
-        write(sheader, data(img))
+        nrrd_write(io, img)
     else
         println(sheader, "data file: ", datafilename)
         if !get(props, "headeronly", false)
             open(datafilename, "w") do file
-                write(file, data(img))
+                nrrd_write(file, img)
             end
         end
     end
-    close(sheader)
 end
 
 ### Interpreting header settings
@@ -348,33 +340,148 @@ function arraytype(filename)
     arraytype!(header, version)
 end
 
+function headerinfo(T, axs)
+    header = Dict{String,Any}()
+    Traw = raw_eltype(T)
+    header["type"] = type2string(Traw)
+    header["endian"] = myendian()
+    header["encoding"] = "raw"
+    # Do the axes information
+    header["dimension"] = length(axs)
+    if isa(axs, Base.Indices)
+        axs = map(length, axs)
+    end
+    if isa(axs, Dims)
+        header["sizes"] = [axs...]
+    else
+        # axs is an Axis-tuple
+        header["sizes"] = [map(length, axs)...]
+        axnames = map(ax->axisnames(ax)[1], axs)
+        isspace = map(s->!startswith(string(s), "time"), axnames)
+        if haskey(axes2space, axnames)
+            header["space"] = axes2space[axnames]
+        else
+            header["space dimension"] = sum(isspace)
+        end
+        header["kinds"] = [isspc ? "domain" : "time" for isspc in isspace]
+        if !all(isdefaultname, axnames)
+            header["labels"] = [string(s) for s in axnames]
+        end
+        rng = map(ax->axisvalues(ax)[1], axs)
+        stepval = map(step, rng)
+        unitstr = map(x->isa(x, Quantity) ? string(unit(x)) : "", stepval)
+        spacing = map(x->isa(x, Quantity) ? ustrip(x) : x,        stepval)
+        if !all(x->x=="", unitstr)
+            header["units"] = [unitstr...]
+        end
+        if !all(x->x==1, spacing)
+            header["spacings"] = [spacing...]
+        end
+        origin = map(x->isa(x, Quantity) ? ustrip(x) : x, map(first, rng))
+        if any(x->x!=0, origin)
+            header["space origin"] = [origin...]
+        end
+    end
+    # Adjust the axes for color
+    if T <: Colorant && !(T <: AbstractGray)
+        header["dimension"] = length(axs)+1
+        unshift!(header["sizes"], length(T))
+        if haskey(header, "spacings")
+            unshift!(header["spacings"], NaN)
+        end
+        if haskey(header, "labels")
+            unshift!(header["labels"], lowercase(string(T.name.name)))
+        end
+        if haskey(header, "units")
+            unshift!(header["units"], "")
+        end
+        if haskey(header, "kinds")
+            if T <: RGB
+                colkind = "RGB-color"
+            elseif T <: HSV
+                colkind = "HSV-color"
+            elseif T <: XYZ
+                colkind = "XYZ-color"
+            elseif T <: RGBA
+                colkind = "RGBA-color"
+            else
+                colkind = string(length(T), "-color")
+            end
+            unshift!(header["kinds"], colkind)
+        end
+    end
+    header
+end
+
+function version(header, has_keyvalue::Bool=false)
+    for n = length(version_reqs):-1:1
+        vr = version_reqs[n]
+        for f in vr
+            if haskey(header, f)
+                return n
+            end
+        end
+    end
+    has_keyvalue ? 2 : 1
+end
+
+function isdefaultname(s::AbstractString)
+    startswith(s, "dim_") || startswith(s, "space") ||
+        startswith(s, "time") || startswith(s, "domain")
+end
+isdefaultname(s::Symbol) = isdefaultname(string(s))
+
 """
-    raw_eltye(header) -> T, need_bswap
+    raw_eltype(header) -> Traw, need_bswap
+    raw_eltype(::Type{T}) -> Traw
 
 Get the "basic" element type of the data, e.g., `UInt16` or
 `Float32`.
 
 This function does not try to determine whether the image is color
-(`T` does not contain any color information), nor does it try to
-interpret `T` as a `UFixed` type.
+(`Traw` does not contain any color information), nor does it try to
+interpret `Traw` as a `UFixed` type.
 
 See also: outer_eltype!, fixedtype.
 """
 function raw_eltype(header)
-    Traw = typedict[header["type"]]
+    Traw = string2type[header["type"]]
     need_bswap = haskey(header, "endian") && header["endian"] != myendian() && sizeof(Traw) > 1
     Traw, need_bswap
 end
 
+raw_eltype{C<:Colorant}(::Type{C}) = eltype(C)
+raw_eltype{T<:Fixed}(::Type{T}) = FixedPointNumbers.rawtype(T)
+raw_eltype{T}(::Type{T}) = T
+
 # """
 #     fixedtype(Traw, header) -> Tu
 
-# Attempt to interpret type `Traw` as a `UFixed` type. The
-# interpretation depends in part on the `"max"` field of `header`.
+# Attempt to interpret type `Traw` in terms of . The
+# interpretation depends on whether `header` has a "sample units" field:
+
+#     - "<colorspace> <whitepoint>" indicates that the array is an image,
+#       encoded with the specified colorspace. (Note that if "RGB-color"
+#       is specified in one of the "kinds" entries, the `colorspace`
+#       must be "RGB".) `maxval`
+
+# is a single number for "grayscale", or an n-component tuple for an n-component color.
+
+#     - "Gray maxval" indicates that the array is a grayscale image, and
+#       that "white" (saturated) corresponds to a value of
+#       `maxval`. `maxval` may be expressed in either decimal (e.g.,
+#       "255") or hex ("0xff"). Particularly for 2-byte data (10-, 12-,
+#       14-, or 16-bit cameras), specifying `maxval` can be very helpful.
+
+#     - "Gray" assumes `maxval` to be the maximum of the type, 0xff for
+#       8-bit data and 0xffff for 16-bit data.
 
 # If `Traw` cannot be interpreted as `UFixed`, `Tu = Traw`.
 # """
 # function fixedtype{Traw<:Unsigned}(::Type{Traw}, header)
+#     # Note that "max" is not useful in this context. See https://sourceforge.net/p/teem/bugs/14/
+#     if haskey(header, "sample units") || haskey(header, "sampleunits")
+
 #     f = 8*sizeof(Traw)
 #     if haskey(header, "max")
 #         mx = parse(Traw, header["max"])
@@ -386,7 +493,6 @@ end
 #     UFixed{Traw,f}
 # end
 
-# "max" is not useful in this context. See https://sourceforge.net/p/teem/bugs/14/
 fixedtype(::Type{UInt8}, header) = UFixed8
 fixedtype{Traw}(::Type{Traw}, header) = Traw
 
@@ -502,7 +608,7 @@ function get_axes(header, nd)
     end
     # ...and the orientation fields
     if haskey(header, "space")
-        sd = spacedimdict[lowercase(header["space"])][1]
+        sd = space2axes[lowercase(header["space"])][1]
     else
         sd = get(header, "space dimension", nd)
     end
@@ -513,7 +619,7 @@ function get_axes(header, nd)
     end
     ## Test whether we have fields that require an AxisArray
     axes_fields = setdiff(per_axis, ["sizes", "kinds", "centers", "centerings"])
-    need_axes = false
+    need_axes = haskey(header, "space")
     for f in axes_fields
         need_axes |= haskey(header, f)
     end
@@ -525,6 +631,9 @@ function get_axes(header, nd)
         istime = map(x->x=="time", kinds)
         isspace = map(x->x=="space" || x=="domain", kinds)
         need_axes |= any(istime)
+    elseif haskey(header, "space")
+        nd == sd || error("confused, have \"space\" but can't tell which axes are spatial: $header")
+        fill!(isspace, true)
     end
     sz = header["sizes"]
     if !need_axes
@@ -543,7 +652,7 @@ function get_axes(header, nd)
             end
         end
     elseif haskey(header, "space")
-        spcnames = map(string, spacedimdict[lowercase(header["space"])][2])
+        spcnames = map(string, space2axes[lowercase(header["space"])][2])
         copy_space!(axnames, spcnames, isspace)
     elseif haskey(header, "kinds")
         # Give axes default names based on their kind: space1, space2, etc.
@@ -634,9 +743,11 @@ positioned at the first byte of the data (if present).
 
 Outputs:
 - `version` is a 4-character string, e.g., "0002", giving the NRRD version of the header.
-- `header` is a `Dict{String,String}` of `field=>setting` pairs (the settings are not parsed, they are pure strings)
-- `keyvals` is a `Dict{String,String}` containing `key=>value` pairs (NRRD0002 or higher lines like key:=value; most NRRD files do not seem to contain any of these)
+- `header` is a `Dict{String,Any}` of `field=>setting` pairs (the settings are parsed, they are not necessarily strings)
+- `keyvals` is a `Dict{String,String}` containing `key=>value` pairs (NRRD0002 or higher, lines like key:=value; many NRRD files do not contain any of these)
 - `comments` is an array containing lines of the header that began with `#` (but with the `#` and leading whitespace stripped out)
+
+See also: write_header.
 """
 function parse_header(io)
     version = ascii(String(read(io, UInt8, 4)))
@@ -679,6 +790,52 @@ function parse_header(filename::AbstractString)
     end
 end
 
+"""
+    write_header(io, version, header, [keyvals, [comments]])
+
+Write an NRRD header, as the top of the .nrrd or the separate .nhdr
+file. `io` should be positioned just after the initial "NRRD" in the
+file. This writes the header and a blank line, so that at the end `io`
+is positioned at the first byte of the data (if present).
+
+Note that if you're writing a header for a "detached" data file
+(separate .nhdr and .raw files), `header` should contain a "data file"
+or "datafile" field storing the name of the .raw file.
+
+Inputs:
+- `version` is a 4-character string, e.g., "0002", giving the NRRD version of the header, or a integer corresponding to a recognized NRRD header version number
+- `header` is a `Dict{String,Any}` of `field=>setting` pairs (as returned by `parse_header`)
+- `keyvals` is a `Dict{String,String}` containing `key=>value` pairs (NRRD0002 or higher, lines like key:=value; many NRRD files do not contain any of these)
+- `comments` is an array containing lines of the header that began with `#` (but with the `#` and leading whitespace stripped out)
+
+See also: parse_header.
+"""
+function write_header(io::IO, version, header, keyvals=nothing, comments=nothing)
+    writeversionstr(io, version)
+
+    for fn in fieldorder
+        if haskey(header, fn)
+            print(io, fn, ": ")
+            T = get(parse_type, fn, String)
+            nrrd_format(io, T, header[fn])
+            println(io, "")
+        end
+    end
+    if keyvals != nothing
+        for (k,v) in keyvals
+            println(io, k, ":=", v)
+        end
+    end
+    if comments != nothing
+        for c in comments
+            println(io, "# ", c)
+        end
+    end
+    println(io)
+    nothing
+end
+write_header(s::Stream{format"NRRD"}, args...) = write_header(stream(s), args...)
+
 nrrd_parse{T}(::Type{T}, str) = parse(T, str)  # fallback
 
 function nrrd_parse(::Type{IntFloat}, str)
@@ -703,7 +860,7 @@ function nrrd_parse{T}(::Type{VTuple{T}}, s::AbstractString)
 end
 
 function nrrd_parse(::Type{VTuple{QString}}, s::AbstractString)
-    str = nrrd_parse(QString, s)  # to strip the first and last "
+    str = nrrd_parse(QString, s)  # to strip the first and last ""
     split(str, r"\" +\"")
 end
 
@@ -725,15 +882,57 @@ function nrrd_parse{T}(::Type{StringPTuple{T}}, s::AbstractString)
     s
 end
 
+writeversionstr(io, v::Integer) = @printf(io, "%04d\n", v)
+function writeversionstr(io, v::AbstractString)
+    length(v) == 4 || error("version string must have 4 characters, got $v")
+    println(io, v)
+end
+
+nrrd_format{T}(io, ::Type{T}, x) = print(io, x)
+
+function nrrd_format(io, ::Type{QString}, str)
+    print(io, '"', str, '"')
+end
+
+function nrrd_format{T}(io, ::Type{VTuple{T}}, container)
+    isfirst = true
+    for x in container
+        if isfirst
+            isfirst = false
+        else
+            print(io, ' ')
+        end
+        nrrd_format(io, T, x)
+    end
+    nothing
+end
+
+function nrrd_format{T}(io, ::Type{PTuple{T}}, container)
+    print(io, '(')
+    isfirst = true
+    for x in container
+        if isfirst
+            isfirst = false
+        else
+            print(io, ',')
+        end
+        nrrd_format(io, T, x)
+    end
+    print(io, ')')
+end
+
+nrrd_format{T}(io, ::Type{StringPTuple{T}}, s::AbstractString) = nrrd_format(io, String, s)
+nrrd_format{T}(io, ::Type{StringPTuple{T}}, container) = nrrd_format(io, PTuple{T}, container)
+
 alloctype{T}(::Type{T}) = T
 alloctype{T}(::Type{StringPTuple{T}}) = Any # Union{String,Vector{T}}
+
+### Utilities
 
 function chksize(sz, sztarget)
     sz == sztarget || error("dimension size should be $sztarget, got $sz")
     nothing
 end
-
-### Utilities
 
 function startstoplen(min::Integer, max::Integer, len::Integer)
     if max-min == len-1
@@ -764,6 +963,15 @@ end
 
 function startstopsteplen{T<:Integer}(min::T, max::T, stepval::T, len)
     stepval == 1 ? (min:max) : (min:stepval:max)
+end
+function startstopsteplen{T<:AbstractFloat}(min::T, max::T, stepval::T, len)
+    imin, imax, istepval = round(Int, min), round(Int, max), round(Int, stepval)
+    if min ≈ imin && max ≈ imax && stepval ≈ istepval
+        return startstopsteplen(imin, imax, istepval, len)
+    end
+    r = Ranges.linspace(min, max, len)
+    abs(step(r)/stepval - 1) < 0.01 || error("wanted length $len from $min to $max, got $r of length $(length(r))")
+    r
 end
 function startstopsteplen{T}(min::T, max::T, stepval::T, len)
     r = Ranges.linspace(min, max, len)
@@ -857,23 +1065,9 @@ function find_datafile(s::Stream{format"NRRD"}, header; mode="r")
     find_datafile(stream(s), header; mode=mode)
 end
 
-# function parse_quantity(s::AbstractString, strict::Bool = true)
-#     # Find the last character of the numeric component
-#     m = match(r"[0-9\.\+-](?![0-9\.\+-])", s)
-#     if m == nothing
-#         error("AbstractString does not have a 'value unit' structure")
-#     end
-#     val = float64(s[1:m.offset])
-#     ustr = strip(s[m.offset+1:end])
-#     if isempty(ustr)
-#         if strict
-#             error("AbstractString does not have a 'value unit' structure")
-#         else
-#             return val
-#         end
-#     end
-#     val * _unit_string_dict[ustr]
-# end
+nrrd_write{C<:Colorant}(io, A::AbstractArray{C}) = nrrd_write(io, channelview(A))
+nrrd_write{T<:Fixed}(io, A::AbstractArray{T}) = nrrd_write(io, rawview(A))
+nrrd_write(io, A::AbstractArray) = write(io, A)
 
 # Avoids roundoff error in Base's implementation of length
 function safelength(r::StepRange)

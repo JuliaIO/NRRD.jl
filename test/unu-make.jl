@@ -1,13 +1,16 @@
 # Test headers written by `unu make`
-using NRRD, Colors, AxisArrays, ImageAxes, Ranges, Unitful, SimpleTraits
+using NRRD, FileIO, Colors, AxisArrays, ImageAxes, Ranges, Unitful, SimpleTraits
 using Base.Test
 
 headerpath = joinpath(dirname(@__FILE__), "headers")
+writepath = mktempdir()
 const mm = u"mm"
 const μm = u"μm"
 const s = u"s"
 
 @traitimpl TimeAxis{Axis{:t}}
+
+@testset "unu headers" begin
 
 for (file, T, axs, perm) in (("test2duchar.nhdr", UInt8, (5,6), ()),
                              ("test2dushort.nhdr", UInt16, (5,6), ()),
@@ -80,15 +83,33 @@ for (file, T, axs, perm) in (("test2duchar.nhdr", UInt8, (5,6), ()),
                                Axis{:time}(Ranges.range(0s,0.8s,800))),
                               ()))
     try
-        Tr, axsr, permr, need_bswap = NRRD.arraytype(joinpath(headerpath, file))
+        # Read tests
+        filerd = joinpath(headerpath, file)
+        Tr, axsr, permr, need_bswap = NRRD.arraytype(filerd)
         @test Tr == T
         @test axsr === axs
         @test permr == perm
         if contains(file, "time")
             @test any(istimeaxis, axsr)
         end
+        # Write tests
+        filewr = joinpath(writepath, file)
+        open(query(filerd)) do iord
+            skipmagic(iord)
+            version, header, keyvals, comments = NRRD.parse_header(iord)
+            open(filewr, "w") do iowr
+                print(iowr, "NRRD")  # magic bytes
+                NRRD.write_header(iowr, version, header, keyvals, comments)
+            end
+            Tw, axsw, permw, need_bswapw = NRRD.arraytype(filewr)
+            @test Tw == Tr
+            @test axsw == axsr
+            @test permw == permr
+        end
     catch err
         warn("failure on file $file")
         rethrow(err)
     end
 end
+
+end # @testset "unu headers"
