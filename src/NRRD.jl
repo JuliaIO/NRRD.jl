@@ -70,6 +70,51 @@ spacedimdict = @compat Dict(
     "3d-left-handed-time" => 4
 )
 
+immutable QString end                 # string with quotes around it: "mm"
+typealias VTuple{T} Tuple{Vararg{T}}  # space-delimited tuple: 80 150
+immutable PTuple{T} end               # parenthesis-delimited tuple: (80,150)
+immutable StringPTuple{T} end         # string or PTuple{T}
+
+typealias IntFloat Union{Int,Float64}
+
+# This should list anything that DOESN'T parse to a string
+const parse_type = Dict(
+    # basic
+    "dimension"=>Int,
+    "block size"=>Int,
+    "blocksize"=>Int,
+    "min"=>Float64,
+    "max"=>Float64,
+    "old min"=>Float64,
+    "oldmin"=>Float64,
+    "old max"=>Float64,
+    "oldmax"=>Float64,
+    "line skip"=>Int,
+    "lineskip"=>Int,
+    "byte skip"=>Int,
+    "byteskip"=>Int,
+    # orientation
+    "space dimension"=>Int,
+    "space units"=>VTuple{QString},
+    "space origin"=>PTuple{IntFloat},
+    "space directions"=>VTuple{StringPTuple{Float64}},
+    "measurement frame"=>VTuple{PTuple{Float64}},
+    # per-axis
+    "sizes"=>Dims,
+    "spacings"=>VTuple{IntFloat},
+    "thicknesses"=>VTuple{Float64},
+    "axis mins"=>VTuple{IntFloat},
+    "axismins"=>VTuple{IntFloat},
+    "axis maxs"=>VTuple{IntFloat},
+    "axismaxs"=>VTuple{IntFloat},
+    "centers"=>VTuple{String},
+    "centerings"=>VTuple{String},
+    "labels"=>VTuple{QString},
+    "units"=>VTuple{QString},
+    "kinds"=>VTuple{String},
+)
+
+const per_axis = [# orientation-related fields
 function myendian()
     if ENDIAN_BOM == 0x04030201
         return "little"
@@ -378,33 +423,110 @@ function FileIO.save(f::File{format"NRRD"}, img::Image; props::Dict = Dict{ASCII
         if !get(props, "headeronly", false)
             open(datafilename, "w") do file
                 write(file, data(img))
+### Parsing
+
+"""
+    parse_header(io) -> version, header, keyvals, comments
+
+Parse the NRRD header (the top of the .nrrd or the separate .nhdr
+file). `io` should be positioned just after the initial "NRRD" in the
+file. This reads up to and including the first blank line of the file,
+so at the end (if this is a properly-formatted NRRD file) `io` is
+positioned at the first byte of the data (if present).
+
+Outputs:
+- `version` is a 4-character string, e.g., "0002", giving the NRRD version of the header.
+- `header` is a `Dict{String,String}` of `field=>setting` pairs (the settings are not parsed, they are pure strings)
+- `keyvals` is a `Dict{String,String}` containing `key=>value` pairs (NRRD0002 or higher lines like key:=value; most NRRD files do not seem to contain any of these)
+- `comments` is an array containing lines of the header that began with `#` (but with the `#` and leading whitespace stripped out)
+"""
+function parse_header(io)
+    version = ascii(String(read(io, UInt8, 4)))
+    skipchars(io,isspace)
+    header = Dict{String, Any}()
+    keyvals = Dict{String, String}()
+    comments = String[]
+    # Read until we encounter a blank line, which is the separator
+    # between the header and data
+    line = strip(readline(io))
+    while !isempty(line)
+        if line[1] != '#'
+            key, value = split(line, ":")
+            if !isempty(value) && value[1] == '='
+                # This is a NRRD key/value pair, insert into keyvals
+                keyvals[key] = value[2:end]
+            else
+                lkey = lowercase(key)
+                T = get(parse_type, lkey, String)
+                header[lkey] = nrrd_parse(T, strip(value))
+            end
+        else
+            cmt = strip(lstrip(line, ['#', ' ']))
+            if !isempty(cmt)
+                push!(comments, cmt)
             end
         end
+        line = strip(readline(io))
     end
-    close(sheader)
+    version, header, keyvals, comments
 end
 
-function parse_vector_int(s::AbstractString)
-    ss = split_nokeep(s, r"[ ,;]")
-    v = Array(Int, length(ss))
+parse_header(s::Stream{format"NRRD"}) = parse_header(stream(s))
+
+function parse_header(filename::AbstractString)
+    f = File{format"NRRD"}(filename)
+    open(f) do io
+        skipmagic(io)
+        parse_header(io)
+    end
+end
+
+nrrd_parse{T}(::Type{T}, str) = parse(T, str)  # fallback
+
+function nrrd_parse(::Type{IntFloat}, str)
+    x = parse(Float64, str)
+    x == round(x) ? Int(x) : x
+end
+
+nrrd_parse(::Type{String}, str) = str
+
+function nrrd_parse(::Type{QString}, str)
+    str[1] == '"' && str[end] == '"' || error("$str does not start and end with double-quote")
+    str[2:end-1]
+end
+
+function nrrd_parse{T}(::Type{VTuple{T}}, s::AbstractString)
+    ss = split(s)  # r"[ ,;]")
+    v = Array(alloctype(T), length(ss))
     for i = 1:length(ss)
-        v[i] = parse(Int, ss[i])
+        v[i] = nrrd_parse(T, ss[i])
     end
     return v
 end
 
-function parse_vector_float(s::AbstractString)
-    ss = split_nokeep(s, r"[ ,;]")
-    v = Array(Float64, length(ss))
+function nrrd_parse(::Type{VTuple{QString}}, s::AbstractString)
+    str = nrrd_parse(QString, s)  # to strip the first and last "
+    split(str, r"\" +\"")
+end
+
+function nrrd_parse{T}(::Type{PTuple{T}}, s::AbstractString)
+    s[1] == '(' && s[end] == ')' || error("$s should begin and end parentheses")
+    str = s[2:end-1]
+    ss = split(str, ',', keep=false)
+    v = Array(T, length(ss))
     for i = 1:length(ss)
-        v[i] = parse(Float64, ss[i])
+        v[i] = nrrd_parse(T, ss[i])
     end
     return v
 end
 
-function parse_vector_strings(s::AbstractString)
-    (first(s) == '"' && last(s) == '"') || error("Strings must be delimited with quotes")
-    split(s[2:end-1], "\" \"")
+function nrrd_parse{T}(::Type{StringPTuple{T}}, s::AbstractString)
+    if s[1] == '(' && s[end] == ')'
+        return nrrd_parse(PTuple{T}, s)
+    end
+    s
+end
+
 end
 
 if VERSION < v"0.4-dev"
