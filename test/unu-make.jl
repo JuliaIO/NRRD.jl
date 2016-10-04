@@ -1,9 +1,13 @@
 # Test headers written by `unu make`
-using NRRD, ImageAxes, Unitful
+using NRRD, Colors, AxisArrays, ImageAxes, Ranges, Unitful, SimpleTraits
+using Base.Test
 
 headerpath = joinpath(dirname(@__FILE__), "headers")
 const mm = u"mm"
 const μm = u"μm"
+const s = u"s"
+
+@traitimpl TimeAxis{Axis{:t}}
 
 for (file, T, axs, perm) in (("test2duchar.nhdr", UInt8, (5,6), ()),
                              ("test2dushort.nhdr", UInt16, (5,6), ()),
@@ -13,74 +17,78 @@ for (file, T, axs, perm) in (("test2duchar.nhdr", UInt8, (5,6), ()),
 
                              ("test2drgb_spu_spacing.nhdr",
                               RGB{U8},
-                              (Axis{:row}(0mm:2mm:8mm),
-                               Axis{:col}(0.0μm:3.5μm:17.50001μm)),
+                              (Axis{:space_1}(Ranges.linspace(0mm,8mm,5)),
+                               Axis{:space_2}(Ranges.linspace(0μm,17.5μm,6))),
                               ()),
 
                              ("test2d_spu_spacing_labels.nhdr",
                               UInt8,
-                              (Axis{:first}(0mm:2mm:8mm),
-                               Axis{:second}(0mm:3mm:15mm)),
+                              (Axis{:first}(Ranges.linspace(0mm,8mm,5)),
+                               Axis{:second}(Ranges.linspace(0mm,15mm,6))),
                               ()),
 
                              ("test2drgb_spu_spacing_labels.nhdr",
                               RGB{U8},
-                              (5,6),
-                              (Axis{:first}(0mm:2mm:8mm),
-                               Axis{:second}(0mm:3mm:15mm)),
+                              (Axis{:first}(Ranges.linspace(0mm,8mm,5)),
+                               Axis{:second}(Ranges.linspace(0mm,15mm,6))),
                               ()),
 
                              ("test3d_units_range_axes.nhdr",
                               UInt8,
-                              (Axes{:R}(10mm:2mm:14mm),
-                               Axes{:A}(12mm:2mm:18mm),
-                               Axes{:S}(100mm:5mm:110mm)),
+                              (Axis{:R}(Ranges.linspace(10mm,14mm,3)),
+                               Axis{:A}(Ranges.linspace(12mm,16mm,3)),
+                               Axis{:S}(Ranges.linspace(100mm,110mm,3))),
                               ()),
 
                              ("test3dlist_origin.nhdr",
                               UInt8,
-                              (Axes{:R}(1:4),
-                               Axes{:A}(2:5),
-                               Axes{:S}(3:6),
-                               Axis{:dim_4}(1:2)),
+                              (Axis{:R}(1:3),
+                               Axis{:A}(2:4),
+                               Axis{:S}(3:5),
+                               Axis{:dim_4}(0:1)),
                               ()),
 
                              ("test3d_time.nhdr",
                               UInt16,
-                              (Axes{:row}(1:8),
-                               Axes{:col}(1:10),
-                               Axes{:page}(1:3),
-                               Axis{:time}(1:800)),
+                              (Axis{:space_1}(0:7),
+                               Axis{:space_2}(0:9),
+                               Axis{:space_3}(0:2),
+                               Axis{:time}(0:799)),
                               ()),
 
                              ("test3d_time_labels.nhdr",
                               UInt16,
-                              (Axes{:x}(1:8),
-                               Axes{:l}(1:10),
-                               Axes{:s}(1:3),
-                               Axis{:t}(1:800)),
+                              (Axis{:x}(0:7),
+                               Axis{:l}(0:9),
+                               Axis{:s}(0:2),
+                               Axis{:t}(0:799)),
                               ()),
 
                              ("test3d_time_labels_units.nhdr",
                               UInt16,
-                              (Axes{:x}(0μm:0.25μm:1.76μm),
-                               Axes{:l}(0μm:0.25μm:2.26μm),
-                               Axes{:s}(0μm:2μm:4μm),
-                               Axis{:t}(1:800)),
+                              (Axis{:x}(Ranges.range(0μm,0.25μm,8)),
+                               Axis{:l}(Ranges.range(0μm,0.25μm,10)),
+                               Axis{:s}(Ranges.range(0μm,2μm,3)),
+                               Axis{:time}(0:799)),
                               ()),
 
                              ("test3d_time_labels_units_s.nhdr",
                               UInt16,
-                              (Axes{:x}(0μm:0.25μm:1.76μm),
-                               Axes{:l}(0μm:0.25μm:2.26μm),
-                               Axes{:s}(0μm:2μm:4μm),
-                               Axis{:t}(0s:0.8s:639.21s)),
+                              (Axis{:x}(Ranges.range(0μm,0.25μm,8)),
+                               Axis{:l}(Ranges.range(0μm,0.25μm,10)),
+                               Axis{:s}(Ranges.range(0μm,2μm,3)),
+                               Axis{:time}(Ranges.range(0s,0.8s,800))),
                               ()))
-    Tr, axsr, permr, need_bswap = arraytype(joinpath(headerpath, file))
-    @test Tr == T
-    @test axsr == axs
-    @test permr == perm
-    if contains(file, "time")
-        @test timeaxis(axsr) != nothing
+    try
+        Tr, axsr, permr, need_bswap = NRRD.arraytype(joinpath(headerpath, file))
+        @test Tr == T
+        @test axsr === axs
+        @test permr == perm
+        if contains(file, "time")
+            @test any(istimeaxis, axsr)
+        end
+    catch err
+        warn("failure on file $file")
+        rethrow(err)
     end
 end
