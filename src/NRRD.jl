@@ -205,7 +205,8 @@ function load(io::Stream{format"NRRD"}; mode="r", mmap=:auto)
 
     # Read the data
     iodata = find_datafile(io, header; mode=mode)
-    if in(header["encoding"], ("gzip", "gz"))
+    compressed = in(header["encoding"], ("gzip", "gz"))
+    if compressed
         iodata = Libz.ZlibInflateInputStream(iodata)
     end
 
@@ -219,38 +220,18 @@ function load(io::Stream{format"NRRD"}; mode="r", mmap=:auto)
     do_mmap = can_mmap && (prod(szraw) > 10^8) && (mmap == :auto)
     do_mmap |= can_mmap && (mmap == true)
 
+    if !compressed
+        szraw = checked_size(Traw, szraw, iodata)
+    end
+
     if do_mmap
-        cpos = position(iodata)
-        datalen = div(filesize(stat(iodata)) - cpos, sizeof(Traw))
-        if datalen < prod(szraw)
-            if szraw != sz
-                # If we've dropped a dimension due to "absorbing"
-                # color, etc, don't try to figure out how to correct
-                # it, just punt to the user
-                error("data length $datalen too small for size $sz array of $T")
-            end
-            # If the data are smaller than the header suggests, read in as
-            # much "complete" data as are available
-            sznew = [szraw...]
-            strds = [1;cumprod(sznew)]
-            k = length(sznew)
-            sznew[k] = div(datalen, strds[k])
-            while sznew[k] == 0 && k > 1
-                pop!(sznew)
-                k -= 1
-                sznew[k] = div(datalen, strds[k])
-            end
-            tsznew = (sznew...,)
-            warn("header indicates an array size $szraw, but the file size is consistent with at most $tsznew")
-            szraw = tsznew
-        end
         A = Mmap.mmap(iodata, Array{Traw,length(szraw)}, szraw, cpos; grow=false)
         if need_bswap
             f = mode == "r+" ? (bswap, bswap) : bswap
             A = mappedarray(f, A)
         end
     elseif header["encoding"] == "raw" || in(header["encoding"], ("gzip", "gz"))
-        A = read(iodata, T, szraw...)
+        A = read(iodata, Traw, szraw...)
         if need_bswap
             A = [bswap(a) for a in A]
         end
@@ -1033,6 +1014,35 @@ function spacings(spacedirections)
 end
 
 ### File-related functions
+
+# Adjust the array size if the file is not big enough for reading to succeed
+function checked_size(Traw, szraw, iodata)
+    cpos = position(iodata)
+    datalen = div(filesize(stat(iodata)) - cpos, sizeof(Traw))
+    if datalen < prod(szraw)
+        if szraw != sz
+            # If we've dropped a dimension due to "absorbing"
+            # color, etc, don't try to figure out how to correct
+            # it, just punt to the user
+            error("data length $datalen too small for size $sz array of $T")
+        end
+        # If the data are smaller than the header suggests, read in as
+        # much "complete" data as are available
+        sznew = [szraw...]
+        strds = [1;cumprod(sznew)]
+        k = length(sznew)
+        sznew[k] = div(datalen, strds[k])
+        while sznew[k] == 0 && k > 1
+            pop!(sznew)
+            k -= 1
+            sznew[k] = div(datalen, strds[k])
+        end
+        tsznew = (sznew...,)
+        warn("header indicates an array size $szraw, but the file size is consistent with at most $tsznew")
+        szraw = tsznew
+    end
+    szraw
+end
 
 function stream2name(s::IO)
     name = s.name
