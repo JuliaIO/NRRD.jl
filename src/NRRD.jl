@@ -9,6 +9,7 @@ import Libz
 import FixedPointNumbers
 
 using Colors: AbstractGray
+using AxisArrays: HasAxes
 
 string2type = Dict(
     "signed char" => Int8,
@@ -265,7 +266,7 @@ function save(f::File{format"NRRD"}, img::AbstractArray; props::Dict = Dict{Stri
 end
 
 function save{T}(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = Dict{String,Any}(), keyvals=nothing, comments=nothing)
-    axs = axes(img)
+    axs = axisinfo(img)
     header = headerinfo(T, axs)
     # copy fields from props to override those in header
     for (k, v) in props
@@ -288,6 +289,10 @@ function save{T}(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = 
         end
     end
 end
+
+axisinfo(img) = axisinfo(HasAxes(img), img)
+axisinfo(::HasAxes{true}, img) = axes(img)
+axisinfo(::HasAxes, img) = size(img)
 
 ### Interpreting header settings
 
