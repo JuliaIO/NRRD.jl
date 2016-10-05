@@ -1,6 +1,5 @@
-using FileIO, ColorTypes, Unitful, AxisArrays, ImageAxes
+using FileIO, FixedPointNumbers, ColorTypes, Unitful, AxisArrays, ImageAxes
 using Base.Test
-# using Images, ColorTypes, FixedPointNumbers, FileIO
 
 include("unu-make.jl")
 
@@ -71,6 +70,21 @@ include("unu-make.jl")
         @test img == imgc
         @test axisnames(img)[4] == axisnames(imgc)[4] == :time
         @test axisvalues(img) == axisvalues(imgc)
+    end
+
+    @testset "eltype" begin
+        for (elty, name) in ((UInt8, "uint8"),
+                             (UInt8, "u8"),
+                             (Gray{U8}, "gray_u8"),
+                             (RGB{U8}, "rgb_u8"),
+                             (Gray{UFixed16}, "gray_u16"),
+                             (Gray{UFixed12}, "gray_u12"),
+                             (Gray{UFixed12}, "gray_u12_hex"))
+            fn = joinpath(dirname(@__FILE__), "io", "eltype_$name.nrrd")
+            img = load(fn)
+            @test eltype(img) == elty
+            @test size(img) == (3,5)
+        end
     end
 end
 

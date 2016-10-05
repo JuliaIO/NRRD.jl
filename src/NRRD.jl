@@ -1,12 +1,14 @@
 module NRRD
 
 # Packages needed to return the possible range of element types
-using FixedPointNumbers, Colors, StaticArrays, Quaternions
+using FixedPointNumbers, Colors, ColorVectorSpace, StaticArrays, Quaternions
 # Other packages
 using AxisArrays, ImageAxes, Unitful, MappedArrays, Ranges
 using FileIO
 import Libz
 import FixedPointNumbers
+
+using Colors: AbstractGray
 
 string2type = Dict(
     "signed char" => Int8,
@@ -56,7 +58,11 @@ string2type = Dict(
 type2string(::Type{Float16}) = "float16"
 type2string(::Type{Float32}) = "float"
 type2string(::Type{Float64}) = "double"
-type2string{T}(::Type{T}) = lowercase(string(T.name.name))
+type2string{T<:Integer}(::Type{T}) = lowercase(string(T.name.name))
+type2string{T<:Unsigned,f}(::Type{UFixed{T,f}}) = type2string(T)
+type2string{T}(::Type{T}) = type2string(eltype(T), T)
+type2string{T}(::Type{T}, ::Type{T}) = error("type $T unrecognized")
+type2string{T1,T2}(::Type{T1}, ::Type{T2}) = type2string(T1)
 
 space2axes = Dict(
     "right-anterior-superior" => (3,(:R,:A,:S)),
@@ -327,6 +333,27 @@ function headerinfo(T, axs)
     header["type"] = type2string(Traw)
     header["endian"] = myendian()
     header["encoding"] = "raw"
+    if T <: Gray
+        val = gray(one(T))
+        val = isa(val, FixedPoint) ? reinterpret(val) : val
+        header["sample units"] = string("gray ", val)
+    elseif T <: Union{RGB,RGBA}
+        val = red(one(T))
+        val = isa(val, FixedPoint) ? reinterpret(val) : val
+        valfmt = isa(val, Integer) ? 'd' : 'f'
+        if T <: RGB
+            colstr = "rgb"
+            valfmtstr = "(%$valfmt,%$valfmt,%$valfmt)"
+            vals = (val,val,val)
+        else
+            colstr = "rgba"
+            valfmtstr = "(%$valfmt,%$valfmt,%$valfmt,%$valfmt)"
+            vals = (val,val,val,val)
+        end
+        fmtstr = "%s $valfmtstr"
+        x = (colstr, vals...)
+        header["sample units"] = @eval @sprintf($fmtstr, $(x...))
+    end
     # Do the axes information
     header["dimension"] = length(axs)
     if isa(axs, Base.Indices)
@@ -376,20 +403,21 @@ function headerinfo(T, axs)
         if haskey(header, "units")
             unshift!(header["units"], "")
         end
-        if haskey(header, "kinds")
-            if T <: RGB
-                colkind = "RGB-color"
-            elseif T <: HSV
-                colkind = "HSV-color"
-            elseif T <: XYZ
-                colkind = "XYZ-color"
-            elseif T <: RGBA
-                colkind = "RGBA-color"
-            else
-                colkind = string(length(T), "-color")
-            end
-            unshift!(header["kinds"], colkind)
+        if !haskey(header, "kinds")
+            header["kinds"] = ["domain" for d = 1:length(axs)]
         end
+        if T <: RGB
+            colkind = "RGB-color"
+        elseif T <: HSV
+            colkind = "HSV-color"
+        elseif T <: XYZ
+            colkind = "XYZ-color"
+        elseif T <: RGBA
+            colkind = "RGBA-color"
+        else
+            colkind = string(length(T), "-color")
+        end
+        unshift!(header["kinds"], colkind)
     end
     header
 end
@@ -431,51 +459,91 @@ function raw_eltype(header)
     Traw, need_bswap
 end
 
-raw_eltype{C<:Colorant}(::Type{C}) = eltype(C)
-raw_eltype{T<:Fixed}(::Type{T}) = FixedPointNumbers.rawtype(T)
+raw_eltype{C<:Colorant}(::Type{C}) = raw_eltype(eltype(C))
+raw_eltype{T<:FixedPoint}(::Type{T})   = FixedPointNumbers.rawtype(T)
 raw_eltype{T}(::Type{T}) = T
 
-# """
-#     fixedtype(Traw, header) -> Tu
+"""
+    fixedtype(Traw, header) -> Tu
 
-# Attempt to interpret type `Traw` in terms of . The
-# interpretation depends on whether `header` has a "sample units" field:
+Attempt to interpret type `Traw` in terms of . The interpretation
+depends on whether `header` has a "sample units" field of the form:
 
-#     - "<colorspace> <whitepoint>" indicates that the array is an image,
-#       encoded with the specified colorspace. (Note that if "RGB-color"
-#       is specified in one of the "kinds" entries, the `colorspace`
-#       must be "RGB".) `maxval`
+    sample units: <colorspace> <whitepoint>
 
-# is a single number for "grayscale", or an n-component tuple for an n-component color.
+There must be a space between `colorspace` and `whitepoint`, and
+`colorspace` must be one of "gray", "rgb", "rgba", "hsv", "xyz", or
+their uppercase variants.  (Other than "gray", all of these are
+supported "kinds" values. "gray" does not typically correspond to an
+axis, which is why it isn't encoded in "kinds".) The presence of any
+of these words indicates that the data represent an image rather than
+some other kind of array.
 
-#     - "Gray maxval" indicates that the array is a grayscale image, and
-#       that "white" (saturated) corresponds to a value of
-#       `maxval`. `maxval` may be expressed in either decimal (e.g.,
-#       "255") or hex ("0xff"). Particularly for 2-byte data (10-, 12-,
-#       14-, or 16-bit cameras), specifying `maxval` can be very helpful.
+Any other choices are ignored, as "sample units" can also be an
+arbitrary string.
 
-#     - "Gray" assumes `maxval` to be the maximum of the type, 0xff for
-#       8-bit data and 0xffff for 16-bit data.
+# Examples:
 
-# If `Traw` cannot be interpreted as `UFixed`, `Tu = Traw`.
-# """
-# function fixedtype{Traw<:Unsigned}(::Type{Traw}, header)
-#     # Note that "max" is not useful in this context. See https://sourceforge.net/p/teem/bugs/14/
-#     if haskey(header, "sample units") || haskey(header, "sampleunits")
+    # conventional uint8 grayscale
+    sample units: gray 255
 
-#     f = 8*sizeof(Traw)
-#     if haskey(header, "max")
-#         mx = parse(Traw, header["max"])
-#         fmx = log2(mx+1)
-#         if fmx == round(fmx)
-#             f = round(Int, fmx)
-#         end
-#     end
-#     UFixed{Traw,f}
-# end
+    # a 14-bit grayscale camera (numbers can be represented in hex format)
+    sample units: gray 0x3fff
 
-fixedtype(::Type{UInt8}, header) = UFixed8
+    # RGB encoded with float or double
+    sample units: rgb (1.0,1.0,1.0)
+
+    # RGB encoded with float or double, but using the scaling of uint8
+    sample units: rgb (255.0,255.0,255.0)
+
+    # conventional XYZ
+    sample units: xyz (95.047,100.000,108.883)
+
+    # HSV, hue measured in degrees
+    sample units: hsv (360, 0, 1)
+
+    # HSV, hue normalized to [0, 1]
+    sample units: hsv (1, 0, 1)
+
+If `Traw` cannot be interpreted as `UFixed`, `Tu = Traw`.
+"""
+function fixedtype{Traw<:Unsigned}(::Type{Traw}, header)
+    # Note that "max" is not useful in this context.
+    # See https://sourceforge.net/p/teem/bugs/14/
+    if haskey(header, "sample units")
+        su = header["sample units"]
+    elseif haskey(header, "sampleunits")
+        su = header["sampleunits"]
+    else
+        return Traw
+    end
+    idxsplit = findfirst(su, ' ')
+    idxsplit == 0 && return Traw
+    cm, rest = lowercase(su[1:idxsplit-1]), strip(su[idxsplit+1:end])
+    if cm ∈ ("gray", "rgb", "rgba", "xyz", "hsv")
+        # It looks like a whitepoint definition
+        if cm == "gray"
+            val = numberparse(rest)
+            return Gray{fixedtype_max(Traw, val)}
+        elseif cm ∈ ("rgb", "rgba")
+            s = nrrd_parse(PTuple{String}, rest)
+            val = map(numberparse, s)
+            if all(v->v==val[1], val)
+                return fixedtype_max(Traw, val[1])
+            end
+        end
+    end
+    Traw
+end
 fixedtype{Traw}(::Type{Traw}, header) = Traw
+
+function fixedtype_max{Traw<:Unsigned}(::Type{Traw}, mx)
+    fmx = log2(mx+1)
+    if round(fmx) == fmx
+        return UFixed{Traw,round(Int,fmx)}
+    end
+    Traw
+end
 
 """
     colorant_eltype(C, T) -> Tc
@@ -523,13 +591,14 @@ function outer_eltype!(header, Traw)
             if k == "RGB-color"
                 chksize(sz[i], 3)
                 Tu = fixedtype(Traw, header)
+                Tu = Tu == UInt8 ? U8 : (Tu == UInt16 ? UFixed16 : Tu)
                 T = RGB{Tu}
             elseif k == "HSV-color"
                 chksize(sz[i], 3)
-                T = colorant_eltype(HSV, Traw)
+                T = colorant_eltype(HSV, fixedtype(Traw, header))
             elseif k == "XYZ-color"
                 chksize(sz[i], 3)
-                T = colorant_eltype(XYZ, Traw)
+                T = colorant_eltype(XYZ, fixedtype(Traw, header))
             elseif k == "RGBA-color"
                 chksize(sz[i], 4)
                 Tu = fixedtype(Traw, header)
@@ -576,6 +645,9 @@ function outer_eltype!(header, Traw)
                 break
             end
         end
+    end
+    if T == Traw && nd == header["dimension"]
+        T = fixedtype(Traw, header)
     end
     T, nd, perm
 end
@@ -1078,6 +1150,12 @@ end
 nrrd_write{C<:Colorant}(io, A::AbstractArray{C}) = nrrd_write(io, channelview(A))
 nrrd_write{T<:Fixed}(io, A::AbstractArray{T}) = nrrd_write(io, rawview(A))
 nrrd_write(io, A::AbstractArray) = write(io, A)
+
+function numberparse(str)
+    lstr = lowercase(str)
+    startswith(lstr, "0x") && return parse(UInt, lstr)   # hex
+    val = parse(Float64, lstr)
+end
 
 # Avoids roundoff error in Base's implementation of length
 function safelength(r::StepRange)
