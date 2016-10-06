@@ -88,4 +88,6 @@ include("unu-make.jl")
     end
 end
 
+include("readremote.jl")
+
 nothing

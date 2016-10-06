@@ -193,20 +193,20 @@ end
 # Don't extend FileIO.load
 # Set mode to "r+" if you want to be able to modify values in the
 # image and have them update in the disk file
-function load(f::File{format"NRRD"}; mode="r", mmap=:auto)
+function load(f::File{format"NRRD"}, args...; mode="r", mmap=:auto)
     open(f, mode) do io
         skipmagic(io)
-        load(io, mmap=mmap; mode=mode)
+        load(io, args...; mode=mode, mmap=mmap)
     end
 end
 
-function load(io::Stream{format"NRRD"}; mode="r", mmap=:auto)
+function load(io::Stream{format"NRRD"}, Tuser::Type=Any; mode="r", mmap=:auto)
     # Assemble all the information about the array we're about to
     # read: element type, size, and the "meaning" of axes
     version, header, keyvals, comments = parse_header(io)
     Traw, need_bswap = raw_eltype(header)
     szraw = (header["sizes"]...,)  # "sizes" may change in outer_eltype!, grab it now
-    T, nd, perm = outer_eltype!(header, Traw)
+    T, nd, perm = outer_eltype!(header, Traw, Tuser)
     axs = get_axes(header, nd)
     sz = get_size(axs)
 
@@ -582,12 +582,30 @@ element type as determined by `raw_eltype`.
 
 See also: raw_eltype.
 """
-function outer_eltype!(header, Traw)
+function outer_eltype!(header, Traw, Tuser=Any)
     nd = header["dimension"]
     sz = header["sizes"]
     length(sz) == nd || error("parsing of sizes: $(header["sizes"]) is inconsistent with $nd dimensions")
     perm = ()
     T = Traw
+    if !(T <: Tuser)
+        if Tuser <: Union{AbstractRGB,ColorTypes.TransparentRGB}
+            if T <: Unsigned
+                T = UFixed{T,8*sizeof(T)}
+            end
+            T = ccolor(Tuser, base_colorant_type(Tuser){T})
+            length(T) == sz[1] || error("first dimension of size $(sz[1]), expected $(length(T))")
+            # We've just handled the first dimension, so delete the per-axis data for it
+            nd -= 1
+            for fn in per_axis
+                if haskey(header, fn)
+                    deleteat!(header[fn], 1)
+                end
+            end
+        else
+            T = Tuser
+        end
+    end
     if haskey(header, "kinds")
         kinds = header["kinds"]
         length(kinds) == nd || error("parsing of kinds: $(header["kinds"]) is inconsistent with $nd dimensions")
