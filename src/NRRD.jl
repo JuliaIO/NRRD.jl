@@ -60,7 +60,7 @@ type2string(::Type{Float16}) = "float16"
 type2string(::Type{Float32}) = "float"
 type2string(::Type{Float64}) = "double"
 type2string{T<:Integer}(::Type{T}) = lowercase(string(T.name.name))
-type2string{T<:Unsigned,f}(::Type{UFixed{T,f}}) = type2string(T)
+type2string{T<:Unsigned,f}(::Type{Normed{T,f}}) = type2string(T)
 type2string{T}(::Type{T}) = type2string(eltype(T), T)
 type2string{T}(::Type{T}, ::Type{T}) = error("type $T unrecognized")
 type2string{T1,T2}(::Type{T1}, ::Type{T2}) = type2string(T1)
@@ -454,7 +454,7 @@ Get the "basic" element type of the data, e.g., `UInt16` or
 
 This function does not try to determine whether the image is color
 (`Traw` does not contain any color information), nor does it try to
-interpret `Traw` as a `UFixed` type.
+interpret `Traw` as a `Normed` type.
 
 See also: outer_eltype!, fixedtype.
 """
@@ -510,7 +510,7 @@ arbitrary string.
     # HSV, hue normalized to [0, 1]
     sample units: hsv (1, 0, 1)
 
-If `Traw` cannot be interpreted as `UFixed`, `Tu = Traw`.
+If `Traw` cannot be interpreted as `Normed`, `Tu = Traw`.
 """
 function fixedtype{Traw<:Unsigned}(::Type{Traw}, header)
     # Note that "max" is not useful in this context.
@@ -545,7 +545,7 @@ fixedtype{Traw}(::Type{Traw}, header) = Traw
 function fixedtype_max{Traw<:Unsigned}(::Type{Traw}, mx)
     fmx = log2(mx+1)
     if round(fmx) == fmx
-        return UFixed{Traw,round(Int,fmx)}
+        return Normed{Traw,round(Int,fmx)}
     end
     Traw
 end
@@ -591,7 +591,7 @@ function outer_eltype!(header, Traw, Tuser=Any)
     if !(T <: Tuser)
         if Tuser <: Union{AbstractRGB,ColorTypes.TransparentRGB}
             if T <: Unsigned
-                T = UFixed{T,8*sizeof(T)}
+                T = Normed{T,8*sizeof(T)}
             end
             T = ccolor(Tuser, base_colorant_type(Tuser){T})
             length(T) == sz[1] || error("first dimension of size $(sz[1]), expected $(length(T))")
@@ -614,7 +614,7 @@ function outer_eltype!(header, Traw, Tuser=Any)
             if k == "RGB-color"
                 chksize(sz[i], 3)
                 Tu = fixedtype(Traw, header)
-                Tu = Tu == UInt8 ? U8 : (Tu == UInt16 ? UFixed16 : Tu)
+                Tu = Tu == UInt8 ? N0f8 : (Tu == UInt16 ? N0f16 : Tu)
                 T = RGB{Tu}
             elseif k == "HSV-color"
                 chksize(sz[i], 3)

@@ -75,11 +75,11 @@ include("unu-make.jl")
     @testset "eltype" begin
         for (elty, name) in ((UInt8, "uint8"),
                              (UInt8, "u8"),
-                             (Gray{U8}, "gray_u8"),
-                             (RGB{U8}, "rgb_u8"),
-                             (Gray{UFixed16}, "gray_u16"),
-                             (Gray{UFixed12}, "gray_u12"),
-                             (Gray{UFixed12}, "gray_u12_hex"))
+                             (Gray{N0f8}, "gray_u8"),
+                             (RGB{N0f8}, "rgb_u8"),
+                             (Gray{N0f16}, "gray_u16"),
+                             (Gray{N4f12}, "gray_u12"),
+                             (Gray{N4f12}, "gray_u12_hex"))
             fn = joinpath(dirname(@__FILE__), "io", "eltype_$name.nrrd")
             img = load(fn)
             @test eltype(img) == elty

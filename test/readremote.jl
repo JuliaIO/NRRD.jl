@@ -27,7 +27,7 @@ end
     @test maximum(abs(imgf-imgu))/maximum(imgu) <= 1/200
     foolc_file = getfile("foolc.nrrd")
     imgc = load(foolc_file, RGB)
-    @test eltype(imgc) == RGB{U8}
+    @test eltype(imgc) == RGB{N0f8}
     @test size(imgc) == (128,128)
     imgg = convert(Array{Gray}, imgc)
     @test mean(abs(Int.(rawview(channelview(imgg))) - Int.(imgu))) < 12
