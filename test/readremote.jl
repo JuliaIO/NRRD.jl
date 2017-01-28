@@ -1,4 +1,4 @@
-using FileIO, Colors, ImageCore, Base.Test
+using FileIO, FixedPointNumbers, Colors, ImageCore, Base.Test
 
 workdir = joinpath(tempdir(), "ImagesNRRD")
 isdir(workdir) || mkdir(workdir)
@@ -33,6 +33,7 @@ end
     @test mean(abs(Int.(rawview(channelview(imgg))) - Int.(imgu))) < 12
     aneurism_rawfile = getfile("aneurism.raw.gz", base3D)
     aneurism_file = joinpath(workdir, "aneurism.nhdr")
+    aneurism_rawfile_path = joinpath(workdir, "aneurism.raw.gz")
     open(aneurism_file, "w") do io
         write(io, """
 NRRD0001
@@ -42,7 +43,7 @@ dimension: 3
 type: uchar
 sizes: 256 256 256
 spacings: 1 1 1
-data file: $workdir/aneurism.raw.gz
+data file: $aneurism_rawfile_path
 encoding: gzip
 """)
     end

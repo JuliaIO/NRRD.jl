@@ -836,7 +836,9 @@ function parse_header(io)
     line = strip(readline(io))
     while !isempty(line)
         if line[1] != '#'
-            key, value = split(line, ":")
+            idx = findfirst(line, ':')
+            idx == 0 && error("no colon found in $line")
+            key, value = line[1:idx-1], line[idx+1:end]
             if !isempty(value) && value[1] == '='
                 # This is a NRRD key/value pair, insert into keyvals
                 keyvals[key] = value[2:end]
