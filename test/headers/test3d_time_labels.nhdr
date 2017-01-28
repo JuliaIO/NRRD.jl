@@ -1,0 +1,13 @@
+NRRD0004
+# Complete NRRD file format specification at:
+# http://teem.sourceforge.net/nrrd/format.html
+type: unsigned short
+dimension: 4
+space dimension: 3
+sizes: 8 10 3 800
+space directions: none none none none
+kinds: space space space time
+labels: "x" "l" "s" "t"
+endian: little
+encoding: raw
+data file: dummy.raw

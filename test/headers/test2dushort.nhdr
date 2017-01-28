@@ -1,0 +1,9 @@
+NRRD0001
+# Complete NRRD file format specification at:
+# http://teem.sourceforge.net/nrrd/format.html
+type: unsigned short
+dimension: 2
+sizes: 5 6
+endian: little
+encoding: raw
+data file: ./dummy.raw

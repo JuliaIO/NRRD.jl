@@ -1,13 +1,9 @@
-using NRRD
-using FactCheck, Images, ColorTypes, FixedPointNumbers, FileIO
+using FileIO, FixedPointNumbers, ColorTypes, Unitful, AxisArrays, ImageAxes
+using Base.Test
 
-testing_units = Int == Int64
+include("unu-make.jl")
 
-if testing_units
-    using SIUnits, SIUnits.ShortUnits
-end
-
-facts("Read NRRD") do
+@testset "NRRD" begin
     workdir = joinpath(tempdir(), "Images")
     writedir = joinpath(workdir, "write")
     if !isdir(workdir)
@@ -17,44 +13,81 @@ facts("Read NRRD") do
         mkdir(writedir)
     end
 
-    context("Gray, raw") do
+    @testset "Gray, raw" begin
         img = load(joinpath(dirname(@__FILE__), "io", "small.nrrd"))
-        @fact colorspace(img) --> "Gray"
-        @fact ndims(img) --> 3
-        @fact colordim(img) --> 0
-        @fact eltype(img) --> Float32
+        flush(STDOUT)
+        @test eltype(img) == Float32
+        @test ndims(img) == 3
+        @test size(img) == (10,10,10)
         outname = joinpath(writedir, "small.nrrd")
+        isfile(outname) && rm(outname)
         save(outname, img)
         imgc = load(outname)
-        @fact img.data --> imgc.data
+        @test img == imgc
+        @test axisnames(imgc) == axisnames(img)
+        @test axisvalues(imgc) == axisvalues(img)
     end
 
-    context("Units") do
+    @testset "Units" begin
         img = load(joinpath(dirname(@__FILE__), "io", "units.nhdr"))
-        ps = pixelspacing(img)
-        @fact ps[1]/(0.1*Milli*Meter) --> roughly(1)
-        @fact ps[2]/(0.2*Milli*Meter)  --> roughly(1)
-        @fact ps[3]/(1*Milli*Meter)  --> roughly(1)
+        axsv = axisvalues(img)
+        @test step(axsv[1]) == 0.1u"mm"
+        @test step(axsv[2]) == 0.2u"mm"
+        @test step(axsv[3]) == 1u"mm"
+        axsn = axisnames(img)
+        @test axsn == (:L, :P, :S)
+        outname = joinpath(writedir, "units.nrrd")
+        isfile(outname) && rm(outname)
+        save(outname, img)
+        imgc = load(outname)
+        @test img == imgc
+        axsv = axisvalues(imgc)
+        @test step(axsv[1]) == 0.1u"mm"
+        @test step(axsv[2]) == 0.2u"mm"
+        @test step(axsv[3]) == 1u"mm"
+        axsn = axisnames(imgc)
+        @test axsn == (:L, :P, :S)
     end
 
-    context("Gray, compressed (gzip)") do
+    @testset "Compressed (gzip)" begin
         img = load(joinpath(dirname(@__FILE__), "io", "smallgz.nrrd"))
-        @fact colorspace(img) --> "Gray"
-        @fact ndims(img) --> 3
-        @fact colordim(img) --> 0
-        @fact eltype(img) --> Float32
+        @test ndims(img) == 3
+        @test eltype(img) == Float32
         outname = joinpath(writedir, "smallgz.nrrd")
+        isfile(outname) && rm(outname)
         save(outname, img)
         imgc = load(outname)
-        @fact img.data --> imgc.data
+        @test img == imgc
     end
 
-    context("Time is 4th dimension") do
+    @testset "Time is 4th dimension" begin
         img = load(joinpath(dirname(@__FILE__), "io", "small_time.nrrd"))
-        @fact timedim(img) --> 4
+        @test timedim(img) == 4
         outname = joinpath(writedir, "small_time.nrrd")
+        isfile(outname) && rm(outname)
         save(outname, img)
         imgc = load(outname)
-        @fact img.data --> imgc.data
+        @test img == imgc
+        @test axisnames(img)[4] == axisnames(imgc)[4] == :time
+        @test axisvalues(img) == axisvalues(imgc)
+    end
+
+    @testset "eltype" begin
+        for (elty, name) in ((UInt8, "uint8"),
+                             (UInt8, "u8"),
+                             (Gray{N0f8}, "gray_u8"),
+                             (RGB{N0f8}, "rgb_u8"),
+                             (Gray{N0f16}, "gray_u16"),
+                             (Gray{N4f12}, "gray_u12"),
+                             (Gray{N4f12}, "gray_u12_hex"))
+            fn = joinpath(dirname(@__FILE__), "io", "eltype_$name.nrrd")
+            img = load(fn)
+            @test eltype(img) == elty
+            @test size(img) == (3,5)
+        end
     end
 end
+
+include("readremote.jl")
+
+nothing
