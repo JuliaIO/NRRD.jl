@@ -86,6 +86,9 @@ include("unu-make.jl")
             @test size(img) == (3,5)
         end
     end
+
+    gc()  # to close any mmapped files
+    rm(workdir, recursive=true)
 end
 
 include("readremote.jl")
