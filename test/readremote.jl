@@ -54,4 +54,7 @@ encoding: gzip
     @test pixelspacing(imga) == (1.0,1.0,1.0)
 end
 
+gc()  # to close any mmapped files
+rm(workdir, recursive=true)
+
 nothing
