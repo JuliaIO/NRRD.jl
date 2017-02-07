@@ -1,3 +1,5 @@
+__precompile__()
+
 module NRRD
 
 # Packages needed to return the possible range of element types
