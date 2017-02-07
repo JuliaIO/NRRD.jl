@@ -106,7 +106,9 @@ include("unu-make.jl")
     end
 
     gc()  # to close any mmapped files
-    rm(workdir, recursive=true)
+    try
+        rm(workdir, recursive=true)
+    end
 end
 
 include("readremote.jl")
