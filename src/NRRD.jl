@@ -106,7 +106,8 @@ const axes2space = Dict(
 # strings. Please submit PRs to add to this list if you need
 # additional unit support.
 unit_string_dict = Dict("" => 1, "m" => u"m", "mm" => u"mm", "s" => u"s",
-                        "um" => u"μm", "μm" => u"μm")
+                        "um" => u"μm", "μm" => u"μm", "microns" => u"μm",
+                        "pixel" => 1)
 
 immutable QString end                 # string with quotes around it: "mm"
 typealias VTuple{T} Tuple{Vararg{T}}  # space-delimited tuple: 80 150
@@ -791,7 +792,7 @@ function get_axes(header, nd)
         ua = [unit_string_dict[x] for x in header["units"]]
         rng = Any[startstepstop(first(r)*u, step(r)*u, last(r)*u) for (r,u) in zip(rng,ua)]
     elseif haskey(header, "space units")
-        us = [unit_string_dict[x] for x in header["space units"]]
+        us = [get(unit_string_dict, x, 1) for x in header["space units"]]
         ua = fill!(Array{Any}(nd), 1)
         copy_space!(ua, us, isspace)
         for d = 1:nd
