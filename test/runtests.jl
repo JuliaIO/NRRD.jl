@@ -87,8 +87,28 @@ include("unu-make.jl")
         end
     end
 
+    @testset "Mmapped" begin
+        fn = joinpath(writedir, "volume.nrrd")
+        save(fn, zeros(UInt8,500,500,500))
+        v = load(fn)
+        @test size(v) == (500,500,500)
+        @test all(x->x==0, v)
+    end
+
+    @testset "Fiji compatibility" begin
+        for (name, ps) in (("fiji-stack-pixels-16bit.nrrd", (1,1,1)),
+                           ("fiji-stack-microns-16bit.nrrd", (0.4μm, 0.4μm, 2.0μm)))
+            fn = joinpath(dirname(@__FILE__), "io", name)
+            v = load(fn)
+            @test size(v) == (50,40,30)
+            @test pixelspacing(v) == ps
+        end
+    end
+
     gc()  # to close any mmapped files
-    rm(workdir, recursive=true)
+    try
+        rm(workdir, recursive=true)
+    end
 end
 
 include("readremote.jl")

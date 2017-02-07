@@ -1,3 +1,5 @@
+__precompile__()
+
 module NRRD
 
 # Packages needed to return the possible range of element types
@@ -104,7 +106,8 @@ const axes2space = Dict(
 # strings. Please submit PRs to add to this list if you need
 # additional unit support.
 unit_string_dict = Dict("" => 1, "m" => u"m", "mm" => u"mm", "s" => u"s",
-                        "um" => u"μm", "μm" => u"μm")
+                        "um" => u"μm", "μm" => u"μm", "microns" => u"μm",
+                        "pixel" => 1)
 
 immutable QString end                 # string with quotes around it: "mm"
 typealias VTuple{T} Tuple{Vararg{T}}  # space-delimited tuple: 80 150
@@ -228,11 +231,12 @@ function load(io::Stream{format"NRRD"}, Tuser::Type=Any; mode="r", mmap=:auto)
     do_mmap |= can_mmap && (mmap == true)
 
     if !compressed
-        szraw = checked_size(Traw, szraw, iodata)
+        szraw = checked_size(Traw, szraw, sz, iodata)
     end
 
     if do_mmap
-        A = Mmap.mmap(iodata, Array{Traw,length(szraw)}, szraw, cpos; grow=false)
+        A = Mmap.mmap(iodata, Array{Traw,length(szraw)}, szraw, position(iodata);
+                      grow=false)
         if need_bswap
             f = mode == "r+" ? (bswap, bswap) : bswap
             A = mappedarray(f, A)
@@ -707,6 +711,9 @@ function get_axes(header, nd)
         istime = map(x->x=="time", kinds)
         isspace = map(x->x=="space" || x=="domain", kinds)
         need_axes |= any(istime)
+    elseif haskey(header, "space dimension")
+        length(isspace) == sd || error("confused, have \"space dimension\" $sd but got $nd dimensions: $header")
+        fill!(isspace, true)
     elseif haskey(header, "space")
         nd == sd || error("confused, have \"space\" but can't tell which axes are spatial: $header")
         fill!(isspace, true)
@@ -788,7 +795,7 @@ function get_axes(header, nd)
         ua = [unit_string_dict[x] for x in header["units"]]
         rng = Any[startstepstop(first(r)*u, step(r)*u, last(r)*u) for (r,u) in zip(rng,ua)]
     elseif haskey(header, "space units")
-        us = [unit_string_dict[x] for x in header["space units"]]
+        us = [get(unit_string_dict, x, 1) for x in header["space units"]]
         ua = fill!(Array{Any}(nd), 1)
         copy_space!(ua, us, isspace)
         for d = 1:nd
@@ -1113,7 +1120,7 @@ end
 ### File-related functions
 
 # Adjust the array size if the file is not big enough for reading to succeed
-function checked_size(Traw, szraw, iodata)
+function checked_size(Traw, szraw, sz, iodata)
     cpos = position(iodata)
     datalen = div(filesize(stat(iodata)) - cpos, sizeof(Traw))
     if datalen < prod(szraw)
