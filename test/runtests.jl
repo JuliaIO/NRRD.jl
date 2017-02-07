@@ -87,6 +87,14 @@ include("unu-make.jl")
         end
     end
 
+    @testset "Mmapped" begin
+        fn = joinpath(writedir, "volume.nrrd")
+        save(fn, zeros(UInt8,500,500,500))
+        v = load(fn)
+        @test size(v) == (500,500,500)
+        @test all(x->x==0, v)
+    end
+
     gc()  # to close any mmapped files
     rm(workdir, recursive=true)
 end

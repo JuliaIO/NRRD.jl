@@ -228,11 +228,12 @@ function load(io::Stream{format"NRRD"}, Tuser::Type=Any; mode="r", mmap=:auto)
     do_mmap |= can_mmap && (mmap == true)
 
     if !compressed
-        szraw = checked_size(Traw, szraw, iodata)
+        szraw = checked_size(Traw, szraw, sz, iodata)
     end
 
     if do_mmap
-        A = Mmap.mmap(iodata, Array{Traw,length(szraw)}, szraw, cpos; grow=false)
+        A = Mmap.mmap(iodata, Array{Traw,length(szraw)}, szraw, position(iodata);
+                      grow=false)
         if need_bswap
             f = mode == "r+" ? (bswap, bswap) : bswap
             A = mappedarray(f, A)
@@ -1113,7 +1114,7 @@ end
 ### File-related functions
 
 # Adjust the array size if the file is not big enough for reading to succeed
-function checked_size(Traw, szraw, iodata)
+function checked_size(Traw, szraw, sz, iodata)
     cpos = position(iodata)
     datalen = div(filesize(stat(iodata)) - cpos, sizeof(Traw))
     if datalen < prod(szraw)
