@@ -272,6 +272,7 @@ end
 function save{T}(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = Dict{String,Any}(), keyvals=nothing, comments=nothing)
     axs = axisinfo(img)
     header = headerinfo(T, axs)
+    header_eltype!(header, T)
     # copy fields from props to override those in header
     for (k, v) in props
         header[k] = v
@@ -475,8 +476,9 @@ raw_eltype{T}(::Type{T}) = T
 """
     fixedtype(Traw, header) -> Tu
 
-Attempt to interpret type `Traw` in terms of . The interpretation
-depends on whether `header` has a "sample units" field of the form:
+Attempt to interpret type `Traw` in terms of FixedPoint numbers. The
+interpretation depends on whether `header` has a "sample units" field
+of the form:
 
     sample units: <colorspace> <whitepoint>
 
@@ -552,6 +554,36 @@ function fixedtype_max{Traw<:Unsigned}(::Type{Traw}, mx)
         return Normed{Traw,round(Int,fmx)}
     end
     Traw
+end
+
+header_eltype!(header, ::Type) = header
+function header_eltype!{T<:FixedPoint}(header, ::Type{T})
+    header["sample units"] = string("gray ", reinterpret(one(T)))
+    header
+end
+function header_eltype!{C<:Colorant}(header, ::Type{C})
+    _header_eltype!(header, C, eltype(C))
+    header
+end
+function _header_eltype!{C<:AbstractGray,T<:FixedPoint}(header, ::Type{C}, ::Type{T})
+    header["sample units"] = string("gray ", reinterpret(one(T)))
+end
+function _header_eltype!{C<:AbstractGray,T}(header, ::Type{C}, ::Type{T})
+    header["sample units"] = string("gray ", one(T))
+end
+function _header_eltype!{C<:AbstractRGB,T<:FixedPoint}(header, ::Type{C}, ::Type{T})
+    o = reinterpret(one(T))
+    header["sample units"] = "rgb ($o,$o,$o)"
+end
+function _header_eltype!{C<:AbstractRGB,T}(header, ::Type{C}, ::Type{T})
+    o = one(T)
+    header["sample units"] = "rgb ($o,$o,$o)"
+end
+function _header_eltype!{C<:XYZ}(header, ::Type{C}, ::Type)
+    header["sample units"] = "xyz (95.047,100.000,108.883)"
+end
+function _header_eltype!{C<:HSV}(header, ::Type{C}, ::Type)
+    header["sample units"] = "hsv (360, 0, 1)"
 end
 
 """
