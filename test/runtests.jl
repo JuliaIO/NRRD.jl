@@ -26,6 +26,13 @@ include("unu-make.jl")
         @test img == imgc
         @test axisnames(imgc) == axisnames(img)
         @test axisvalues(imgc) == axisvalues(img)
+        # Check that FixedPoint types get properly encoded
+        outname = joinpath(writedir, "small14.nrrd")
+        img = rand(Gray{N2f14}, 5, 5, 2)
+        save(outname, img)
+        imgr = load(outname)
+        @test eltype(imgr) == Gray{N2f14}
+        @test imgr == img
     end
 
     @testset "Units" begin
@@ -88,6 +95,10 @@ include("unu-make.jl")
             img = load(fn)
             @test eltype(img) == elty
             @test size(img) == (3,5)
+            outname = joinpath(writedir, "elt.nrrd")
+            save(outname, img)
+            imgr = load(outname)
+            @test eltype(imgr) == elty
         end
     end
 
