@@ -70,6 +70,10 @@ include("unu-make.jl")
         @test img == imgc
         @test axisnames(img)[4] == axisnames(imgc)[4] == :time
         @test axisvalues(img) == axisvalues(imgc)
+        img = AxisArray(rand(N0f8, 6, 5, 3, 2), :x, :y, :z, :time)
+        save(outname, img)
+        imgr = load(outname)
+        @test axisnames(imgr)[4] == :time
     end
 
     @testset "eltype" begin

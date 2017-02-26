@@ -396,7 +396,7 @@ function headerinfo(T, axs)
         end
         origin = map(x->isa(x, Quantity) ? ustrip(x) : x, map(first, rng))
         if any(x->x!=0, origin)
-            header["space origin"] = [origin...]
+            header["space origin"] = [origin[[isspace...]]...]
         end
     end
     # Adjust the axes for color
@@ -1179,9 +1179,11 @@ function find_datafile(s::Stream{format"NRRD"}, header; mode="r")
     find_datafile(stream(s), header; mode=mode)
 end
 
-nrrd_write{C<:Colorant}(io, A::AbstractArray{C}) = nrrd_write(io, channelview(A))
-nrrd_write{T<:Fixed}(io, A::AbstractArray{T}) = nrrd_write(io, rawview(A))
-nrrd_write(io, A::AbstractArray) = write(io, A)
+nrrd_write(io, A::AxisArray) = nrrd_write(io, A.data)
+nrrd_write(io, A::AbstractArray) = nrrd_write_elty(io, A)
+nrrd_write_elty{C<:Colorant}(io, A::AbstractArray{C}) = nrrd_write_elty(io, channelview(A))
+nrrd_write_elty{T<:Fixed}(io, A::AbstractArray{T}) = nrrd_write_elty(io, rawview(A))
+nrrd_write_elty(io, A::AbstractArray) = write(io, A)
 
 function numberparse(str)
     lstr = lowercase(str)
