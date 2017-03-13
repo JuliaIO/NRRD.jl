@@ -110,6 +110,12 @@ include("unu-make.jl")
         @test all(x->x==0, v)
     end
 
+    @testset "Endian mmapped" begin
+        fn = joinpath(dirname(@__FILE__), "io", "bswap.nrrd")
+        img = load(fn; mmap=true)
+        @test img == [255 254; 1 2]
+    end
+
     @testset "Fiji compatibility" begin
         for (name, ps) in (("fiji-stack-pixels-16bit.nrrd", (1,1,1)),
                            ("fiji-stack-microns-16bit.nrrd", (0.4μm, 0.4μm, 2.0μm)))
