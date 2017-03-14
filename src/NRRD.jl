@@ -251,7 +251,9 @@ function load(io::Stream{format"NRRD"}, Tuser::Type=Any; mode="r", mmap=:auto)
     end
 
     if perm == ()
-        A = reinterpret(T, A, sz)
+        if T != eltype(A)
+            A = need_bswap ? A = mappedarray(x->T(x), A) : reinterpret(T, A, sz)
+        end
     else
         A = permuteddimsview(A, perm)
         if T<:Color
