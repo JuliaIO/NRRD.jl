@@ -126,6 +126,18 @@ include("unu-make.jl")
         end
     end
 
+    @testset "Header only" begin
+        img = load(joinpath(dirname(@__FILE__), "io", "small.nrrd"))
+        outname = joinpath(writedir, "small.nhdr")
+        isfile(outname) && rm(outname)
+        props = Dict("datafile"=>joinpath(writedir,"small.raw"))
+        save(outname, img; props=props)
+        imgc = load(outname)
+        @test img == imgc
+        @test axisnames(imgc) == axisnames(img)
+        @test axisvalues(imgc) == axisvalues(img)
+    end
+
     gc()  # to close any mmapped files
     try
         rm(workdir, recursive=true)
