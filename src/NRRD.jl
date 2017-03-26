@@ -288,7 +288,7 @@ function save{T}(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = 
     if isempty(datafilename)
         nrrd_write(io, img)
     else
-        println(sheader, "data file: ", datafilename)
+        println(io, "data file: ", datafilename)
         if !get(props, "headeronly", false)
             open(datafilename, "w") do file
                 nrrd_write(file, img)
