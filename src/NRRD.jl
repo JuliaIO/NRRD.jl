@@ -5,10 +5,15 @@ module NRRD
 # Packages needed to return the possible range of element types
 using FixedPointNumbers, Colors, ColorVectorSpace, StaticArrays, Quaternions
 # Other packages
-using AxisArrays, ImageAxes, Unitful, MappedArrays, Ranges
+using AxisArrays, ImageAxes, Unitful, MappedArrays
 using FileIO
 import Libz
 import FixedPointNumbers
+using Compat
+if VERSION < v"0.6.0-dev.2390"
+    using Ranges
+    const linspace = Ranges.linspace
+end
 
 using Colors: AbstractGray
 using AxisArrays: HasAxes
@@ -110,11 +115,11 @@ unit_string_dict = Dict("" => 1, "m" => u"m", "mm" => u"mm", "s" => u"s",
                         "pixel" => 1)
 
 immutable QString end                 # string with quotes around it: "mm"
-typealias VTuple{T} Tuple{Vararg{T}}  # space-delimited tuple: 80 150
+@compat VTuple{T} = Tuple{Vararg{T}}  # space-delimited tuple: 80 150
 immutable PTuple{T} end               # parenthesis-delimited tuple: (80,150)
 immutable StringPTuple{T} end         # string or PTuple{T}
 
-typealias IntFloat Union{Int,Float64}
+immutable IntFloat end
 
 # This should list anything that DOESN'T parse to a string
 const parse_type = Dict(
@@ -139,7 +144,7 @@ const parse_type = Dict(
     "space directions"=>VTuple{StringPTuple{Float64}},
     "measurement frame"=>VTuple{PTuple{Float64}},
     # per-axis
-    "sizes"=>Dims,
+    "sizes"=>VTuple{Int},
     "spacings"=>VTuple{IntFloat},
     "thicknesses"=>VTuple{Float64},
     "axis mins"=>VTuple{IntFloat},
@@ -971,7 +976,7 @@ end
 
 function nrrd_parse{T}(::Type{VTuple{T}}, s::AbstractString)
     ss = split(s)  # r"[ ,;]")
-    v = Array(alloctype(T), length(ss))
+    v = Vector{alloctype(T)}(length(ss))
     for i = 1:length(ss)
         v[i] = nrrd_parse(T, ss[i])
     end
@@ -987,7 +992,7 @@ function nrrd_parse{T}(::Type{PTuple{T}}, s::AbstractString)
     s[1] == '(' && s[end] == ')' || error("$s should begin and end parentheses")
     str = s[2:end-1]
     ss = split(str, ',', keep=false)
-    v = Array(T, length(ss))
+    v = Vector{alloctype(T)}(length(ss))
     for i = 1:length(ss)
         v[i] = nrrd_parse(T, ss[i])
     end
@@ -1045,6 +1050,7 @@ nrrd_format{T}(io, ::Type{StringPTuple{T}}, container) = nrrd_format(io, PTuple{
 
 alloctype{T}(::Type{T}) = T
 alloctype{T}(::Type{StringPTuple{T}}) = Any # Union{String,Vector{T}}
+alloctype(::Type{IntFloat}) = Union{Int,Float64}
 
 ### Utilities
 
@@ -1088,12 +1094,12 @@ function startstopsteplen{T<:AbstractFloat}(min::T, max::T, stepval::T, len)
     if min ≈ imin && max ≈ imax && stepval ≈ istepval
         return startstopsteplen(imin, imax, istepval, len)
     end
-    r = Ranges.linspace(min, max, len)
+    r = linspace(min, max, len)
     abs(step(r)/stepval - 1) < 0.01 || error("wanted length $len from $min to $max, got $r of length $(length(r))")
     r
 end
 function startstopsteplen{T}(min::T, max::T, stepval::T, len)
-    r = Ranges.linspace(min, max, len)
+    r = linspace(min, max, len)
     abs(step(r)/stepval - 1) < 0.01 || error("wanted length $len from $min to $max, got $r of length $(length(r))")
     r
 end
