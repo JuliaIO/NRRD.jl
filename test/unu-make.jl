@@ -1,5 +1,5 @@
 # Test headers written by `unu make`
-using NRRD, FileIO, Colors, AxisArrays, ImageAxes, Ranges, Unitful, SimpleTraits
+using NRRD, FileIO, Colors, AxisArrays, ImageAxes, Unitful, SimpleTraits
 using Base.Test
 
 headerpath = joinpath(dirname(@__FILE__), "headers")
@@ -20,27 +20,27 @@ for (file, T, axs, perm) in (("test2duchar.nhdr", UInt8, (5,6), ()),
 
                              ("test2drgb_spu_spacing.nhdr",
                               RGB{N0f8},
-                              (Axis{:space_1}(Ranges.linspace(0mm,8mm,5)),
-                               Axis{:space_2}(Ranges.linspace(0μm,17.5μm,6))),
+                              (Axis{:space_1}(NRRD.linspace(0.0,8.0,5)*mm),
+                               Axis{:space_2}(NRRD.linspace(0.0,17.5,6)*μm)),
                               ()),
 
                              ("test2d_spu_spacing_labels.nhdr",
                               UInt8,
-                              (Axis{:first}(Ranges.linspace(0mm,8mm,5)),
-                               Axis{:second}(Ranges.linspace(0mm,15mm,6))),
+                              (Axis{:first}(NRRD.linspace(0.0,8.0,5)*mm),
+                               Axis{:second}(NRRD.linspace(0.0,15.0,6)*mm)),
                               ()),
 
                              ("test2drgb_spu_spacing_labels.nhdr",
                               RGB{N0f8},
-                              (Axis{:first}(Ranges.linspace(0mm,8mm,5)),
-                               Axis{:second}(Ranges.linspace(0mm,15mm,6))),
+                              (Axis{:first}(NRRD.linspace(0.0,8.0,5)*mm),
+                               Axis{:second}(NRRD.linspace(0.0,15.0,6)*mm)),
                               ()),
 
                              ("test3d_units_range_axes.nhdr",
                               UInt8,
-                              (Axis{:R}(Ranges.linspace(10mm,14mm,3)),
-                               Axis{:A}(Ranges.linspace(12mm,16mm,3)),
-                               Axis{:S}(Ranges.linspace(100mm,110mm,3))),
+                              (Axis{:R}(NRRD.linspace(10.0,14.0,3)*mm),
+                               Axis{:A}(NRRD.linspace(12.0,16.0,3)*mm),
+                               Axis{:S}(NRRD.linspace(100.0,110.0,3)*mm)),
                               ()),
 
                              ("test3dlist_origin.nhdr",
@@ -69,18 +69,18 @@ for (file, T, axs, perm) in (("test2duchar.nhdr", UInt8, (5,6), ()),
 
                              ("test3d_time_labels_units.nhdr",
                               UInt16,
-                              (Axis{:x}(Ranges.range(0μm,0.25μm,8)),
-                               Axis{:l}(Ranges.range(0μm,0.25μm,10)),
-                               Axis{:s}(Ranges.range(0μm,2μm,3)),
+                              (Axis{:x}(NRRD.range(0.0,0.25,8)*μm),
+                               Axis{:l}(NRRD.range(0.0,0.25,10)*μm),
+                               Axis{:s}(NRRD.range(0.0,2.0,3)*μm),
                                Axis{:time}(0:799)),
                               ()),
 
                              ("test3d_time_labels_units_s.nhdr",
                               UInt16,
-                              (Axis{:x}(Ranges.range(0μm,0.25μm,8)),
-                               Axis{:l}(Ranges.range(0μm,0.25μm,10)),
-                               Axis{:s}(Ranges.range(0μm,2μm,3)),
-                               Axis{:time}(Ranges.range(0s,0.8s,800))),
+                              (Axis{:x}(NRRD.range(0.0,0.25,8)*μm),
+                               Axis{:l}(NRRD.range(0.0,0.25,10)*μm),
+                               Axis{:s}(NRRD.range(0.0,2.0,3)*μm),
+                               Axis{:time}(NRRD.range(0.0,0.8,800) * s)),
                               ()))
     try
         # Read tests
@@ -88,6 +88,13 @@ for (file, T, axs, perm) in (("test2duchar.nhdr", UInt8, (5,6), ()),
         Tr, axsr, permr, need_bswap = NRRD.arraytype(filerd)
         @test Tr == T
         @test axsr === axs
+        if !(axsr === axs)
+            for (axr, ax) in zip(axsr, axs)
+                println("axr == ax: ", axr == ax)
+                println(axr)
+                println(ax)
+            end
+        end
         @test permr == perm
         if contains(file, "time")
             @test any(istimeaxis, axsr)

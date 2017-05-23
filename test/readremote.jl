@@ -24,13 +24,13 @@ end
     @test eltype(imgf) == Float32
     @test size(imgf) == (128,128)
     @test imgf[120,5] < imgf[5,5] < imgf[120,120]
-    @test maximum(abs(imgf-imgu))/maximum(imgu) <= 1/200
+    @test maximum(abs.(imgf-imgu))/maximum(imgu) <= 1/200
     foolc_file = getfile("foolc.nrrd")
     imgc = load(foolc_file, RGB)
     @test eltype(imgc) == RGB{N0f8}
     @test size(imgc) == (128,128)
     imgg = convert(Array{Gray}, imgc)
-    @test mean(abs(Int.(rawview(channelview(imgg))) - Int.(imgu))) < 12
+    @test mean(abs.(Int.(rawview(channelview(imgg))) - Int.(imgu))) < 12
     aneurism_rawfile = getfile("aneurism.raw.gz", base3D)
     aneurism_file = joinpath(workdir, "aneurism.nhdr")
     aneurism_rawfile_path = joinpath(workdir, "aneurism.raw.gz")
