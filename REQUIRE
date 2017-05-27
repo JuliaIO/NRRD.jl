@@ -13,3 +13,4 @@ ImageAxes
 MappedArrays
 Ranges
 Compat 0.18
+UnalignedVectors
