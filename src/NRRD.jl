@@ -5,7 +5,7 @@ module NRRD
 # Packages needed to return the possible range of element types
 using FixedPointNumbers, Colors, ColorVectorSpace, StaticArrays, Quaternions
 # Other packages
-using AxisArrays, ImageAxes, Unitful, MappedArrays
+using AxisArrays, ImageAxes, Unitful, MappedArrays, UnalignedVectors
 using FileIO
 import Libz
 import FixedPointNumbers
@@ -240,8 +240,13 @@ function load(io::Stream{format"NRRD"}, Tuser::Type=Any; mode="r", mmap=:auto)
     end
 
     if do_mmap
-        A = Mmap.mmap(iodata, Array{Traw,length(szraw)}, szraw, position(iodata);
-                      grow=false)
+        pos = position(iodata)
+        if (pos % sizeof(T) == 0)
+            A = Mmap.mmap(iodata, Array{Traw,length(szraw)}, szraw, pos; grow=false)
+        else
+            a = Mmap.mmap(iodata, Vector{UInt8}, prod(szraw)*sizeof(Traw), pos; grow=false)
+            A = reshape(UnalignedVector{Traw}(a), szraw)
+        end
         if need_bswap
             f = mode == "r+" ? (bswap, bswap) : bswap
             A = mappedarray(f, A)
@@ -290,10 +295,25 @@ function save{T}(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = 
     if isempty(datafilename)
         datafilename = get(props, "data file", "")
     end
+    s = stream(io)
     if isempty(datafilename)
-        nrrd_write(io, img)
+        try  # not all streams support `position`
+            # Set up the alignment so it's favorable for mmap
+            pos = position(s)
+            nchr = (pos + 1) % sizeof(T) # +1 for the newline char
+            if nchr != 0
+                # write a line of `#` to pad the header
+                nhash = sizeof(T) - mod(pos + 2, sizeof(T))  # now we need 2 newlines
+                for i = 1:nhash
+                    print(s, '#')
+                end
+                print(s,'\n')
+            end
+        end
+        print(s,'\n')
+        nrrd_write(s, img)
     else
-        println(io, "data file: ", datafilename)
+        println(s, "data file: ", datafilename)
         if !get(props, "headeronly", false)
             open(datafilename, "w") do file
                 nrrd_write(file, img)
@@ -955,7 +975,7 @@ function write_header(io::IO, version, header, keyvals=nothing, comments=nothing
             println(io, "# ", c)
         end
     end
-    println(io)
+    # Don't print the blank line here, because we might want to tweak the alignment
     nothing
 end
 write_header(s::Stream{format"NRRD"}, args...) = write_header(stream(s), args...)
