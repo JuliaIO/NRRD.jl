@@ -1,4 +1,4 @@
-using FileIO, FixedPointNumbers, ColorTypes, Unitful, AxisArrays, ImageAxes
+using FileIO, FixedPointNumbers, ColorTypes, Unitful, AxisArrays, ImageAxes, ImageMetadata
 using Base.Test
 
 include("unu-make.jl")
@@ -136,6 +136,14 @@ include("unu-make.jl")
         @test img == imgc
         @test axisnames(imgc) == axisnames(img)
         @test axisvalues(imgc) == axisvalues(img)
+    end
+
+    @testset "N0f16 ImageMeta" begin
+        img = ImageMeta(rand(N0f16, 5, 7), info=false)
+        outname = joinpath(writedir, "imagemeta.nhdr")
+        save(outname, img)
+        imgc = load(outname)
+        @test img == imgc
     end
 
     gc()  # to close any mmapped files
