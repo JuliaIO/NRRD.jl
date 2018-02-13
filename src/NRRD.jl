@@ -1222,7 +1222,7 @@ end
 nrrd_write(io, A::AxisArray) = nrrd_write(io, A.data)
 nrrd_write(io, A::AbstractArray) = nrrd_write_elty(io, A)
 nrrd_write_elty{C<:Colorant}(io, A::AbstractArray{C}) = nrrd_write_elty(io, channelview(A))
-nrrd_write_elty{T<:Fixed}(io, A::AbstractArray{T}) = nrrd_write_elty(io, rawview(A))
+nrrd_write_elty{T<:FixedPoint}(io, A::AbstractArray{T}) = nrrd_write_elty(io, rawview(A))
 nrrd_write_elty(io, A::AbstractArray) = write(io, A)
 
 function numberparse(str)
