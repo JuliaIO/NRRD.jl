@@ -351,11 +351,11 @@ function headerinfo(T, axs)
     header["endian"] = myendian()
     header["encoding"] = "raw"
     if T <: Gray
-        val = gray(one(T))
+        val = gray(oneunit(T))
         val = isa(val, FixedPoint) ? reinterpret(val) : val
         header["sample units"] = string("gray ", val)
     elseif T <: Union{RGB,RGBA}
-        val = red(one(T))
+        val = red(oneunit(T))
         val = isa(val, FixedPoint) ? reinterpret(val) : val
         valfmt = isa(val, Integer) ? 'd' : 'f'
         if T <: RGB
