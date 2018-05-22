@@ -8,7 +8,9 @@ const base3D   = "http://www.tc18.org/code_data_set/3D_greyscale"
 function getfile(name, base=teembase)
     file = joinpath(workdir, name)
     if !isfile(file)
-        file = download(joinpath(base, name), file)
+        url = joinpath(base, name)
+        run(`curl --insecure -L -f -o $file $url`) # ignore certificate errors
+        # file = download(url, file)
     end
     file
 end
