@@ -1,4 +1,4 @@
-using FileIO, FixedPointNumbers, Colors, ImageCore, Base.Test
+using FileIO, FixedPointNumbers, Colors, ImageCore, Test, Statistics
 
 workdir = joinpath(tempdir(), "ImagesNRRD")
 isdir(workdir) || mkdir(workdir)
@@ -54,7 +54,7 @@ encoding: gzip
     @test pixelspacing(imga) == (1.0,1.0,1.0)
 end
 
-gc()  # to close any mmapped files
+GC.gc()  # to close any mmapped files
 rm(workdir, recursive=true)
 
 nothing

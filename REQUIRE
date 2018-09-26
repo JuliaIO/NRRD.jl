@@ -1,4 +1,4 @@
-julia 0.5
+julia 0.7
 FixedPointNumbers 0.3.0
 Colors
 ColorVectorSpace
@@ -11,5 +11,3 @@ FileIO
 AxisArrays
 ImageAxes
 MappedArrays
-Ranges
-Compat 0.18
