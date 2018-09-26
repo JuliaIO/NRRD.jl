@@ -1,5 +1,5 @@
 using FileIO, FixedPointNumbers, ColorTypes, Unitful, AxisArrays, ImageAxes, ImageMetadata
-using Base.Test
+using Test
 
 include("unu-make.jl")
 
@@ -15,7 +15,7 @@ include("unu-make.jl")
 
     @testset "Gray, raw" begin
         img = load(joinpath(dirname(@__FILE__), "io", "small.nrrd"))
-        flush(STDOUT)
+        flush(stdout)
         @test eltype(img) == Float32
         @test ndims(img) == 3
         @test size(img) == (10,10,10)
@@ -146,9 +146,10 @@ include("unu-make.jl")
         @test img == imgc
     end
 
-    gc()  # to close any mmapped files
+    GC.gc()  # to close any mmapped files
     try
         rm(workdir, recursive=true)
+    catch
     end
 end
 

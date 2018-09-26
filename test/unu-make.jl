@@ -1,6 +1,6 @@
 # Test headers written by `unu make`
 using NRRD, FileIO, Colors, AxisArrays, ImageAxes, Unitful, SimpleTraits
-using Base.Test
+using Test
 
 headerpath = joinpath(dirname(@__FILE__), "headers")
 writepath = mktempdir()
@@ -20,27 +20,27 @@ for (file, T, axs, perm) in (("test2duchar.nhdr", UInt8, (5,6), ()),
 
                              ("test2drgb_spu_spacing.nhdr",
                               RGB{N0f8},
-                              (Axis{:space_1}(NRRD.linspace(0.0,8.0,5)*mm),
-                               Axis{:space_2}(NRRD.linspace(0.0,17.5,6)*μm)),
+                              (Axis{:space_1}(range(0.0,stop=8.0,length=5)*mm),
+                               Axis{:space_2}(range(0.0,stop=17.5,length=6)*μm)),
                               ()),
 
                              ("test2d_spu_spacing_labels.nhdr",
                               UInt8,
-                              (Axis{:first}(NRRD.linspace(0.0,8.0,5)*mm),
-                               Axis{:second}(NRRD.linspace(0.0,15.0,6)*mm)),
+                              (Axis{:first}(range(0.0,stop=8.0,length=5)*mm),
+                               Axis{:second}(range(0.0,stop=15.0,length=6)*mm)),
                               ()),
 
                              ("test2drgb_spu_spacing_labels.nhdr",
                               RGB{N0f8},
-                              (Axis{:first}(NRRD.linspace(0.0,8.0,5)*mm),
-                               Axis{:second}(NRRD.linspace(0.0,15.0,6)*mm)),
+                              (Axis{:first}(range(0.0,stop=8.0,length=5)*mm),
+                               Axis{:second}(range(0.0,stop=15.0,length=6)*mm)),
                               ()),
 
                              ("test3d_units_range_axes.nhdr",
                               UInt8,
-                              (Axis{:R}(NRRD.linspace(10.0,14.0,3)*mm),
-                               Axis{:A}(NRRD.linspace(12.0,16.0,3)*mm),
-                               Axis{:S}(NRRD.linspace(100.0,110.0,3)*mm)),
+                              (Axis{:R}(range(10.0,stop=14.0,length=3)*mm),
+                               Axis{:A}(range(12.0,stop=16.0,length=3)*mm),
+                               Axis{:S}(range(100.0,stop=110.0,length=3)*mm)),
                               ()),
 
                              ("test3dlist_origin.nhdr",
@@ -69,18 +69,18 @@ for (file, T, axs, perm) in (("test2duchar.nhdr", UInt8, (5,6), ()),
 
                              ("test3d_time_labels_units.nhdr",
                               UInt16,
-                              (Axis{:x}(NRRD.range(0.0,0.25,8)*μm),
-                               Axis{:l}(NRRD.range(0.0,0.25,10)*μm),
-                               Axis{:s}(NRRD.range(0.0,2.0,3)*μm),
+                              (Axis{:x}(range(0.0,step=0.25,length=8)*μm),
+                               Axis{:l}(range(0.0,step=0.25,length=10)*μm),
+                               Axis{:s}(range(0.0,step=2.0,length=3)*μm),
                                Axis{:time}(0:799)),
                               ()),
 
                              ("test3d_time_labels_units_s.nhdr",
                               UInt16,
-                              (Axis{:x}(NRRD.range(0.0,0.25,8)*μm),
-                               Axis{:l}(NRRD.range(0.0,0.25,10)*μm),
-                               Axis{:s}(NRRD.range(0.0,2.0,3)*μm),
-                               Axis{:time}(NRRD.range(0.0,0.8,800) * s)),
+                              (Axis{:x}(range(0.0,step=0.25,length=8)*μm),
+                               Axis{:l}(range(0.0,step=0.25,length=10)*μm),
+                               Axis{:s}(range(0.0,step=2.0,length=3)*μm),
+                               Axis{:time}(range(0.0,step=0.8,length=800) * s)),
                               ()))
     try
         # Read tests
@@ -96,7 +96,7 @@ for (file, T, axs, perm) in (("test2duchar.nhdr", UInt8, (5,6), ()),
             end
         end
         @test permr == perm
-        if contains(file, "time")
+        if occursin("time", file)
             @test any(istimeaxis, axsr)
         end
         # Write tests

@@ -1,4 +1,4 @@
-using FileIO, FixedPointNumbers, Colors, ImageCore, Base.Test
+using FileIO, FixedPointNumbers, Colors, ImageCore, Test, Statistics
 
 workdir = joinpath(tempdir(), "ImagesNRRD")
 isdir(workdir) || mkdir(workdir)
@@ -31,30 +31,30 @@ end
     @test size(imgc) == (128,128)
     imgg = convert(Array{Gray}, imgc)
     @test mean(abs.(Int.(rawview(channelview(imgg))) - Int.(imgu))) < 12
-    aneurism_rawfile = getfile("aneurism.raw.gz", base3D)
-    aneurism_file = joinpath(workdir, "aneurism.nhdr")
-    aneurism_rawfile_path = joinpath(workdir, "aneurism.raw.gz")
-    open(aneurism_file, "w") do io
-        write(io, """
-NRRD0001
-content: aneurism
-# Courtesy of Philips Research, Hamburg, Germany
-dimension: 3
-type: uchar
-sizes: 256 256 256
-spacings: 1 1 1
-data file: $aneurism_rawfile_path
-encoding: gzip
-""")
-    end
-    imga = load(aneurism_file)
-    @test eltype(imga) == UInt8
-    @test size(imga) == (256,256,256)
-    @test sdims(imga) == 3
-    @test pixelspacing(imga) == (1.0,1.0,1.0)
+#     aneurism_rawfile = getfile("aneurism.raw.gz", base3D)
+#     aneurism_file = joinpath(workdir, "aneurism.nhdr")
+#     aneurism_rawfile_path = joinpath(workdir, "aneurism.raw.gz")
+#     open(aneurism_file, "w") do io
+#         write(io, """
+# NRRD0001
+# content: aneurism
+# # Courtesy of Philips Research, Hamburg, Germany
+# dimension: 3
+# type: uchar
+# sizes: 256 256 256
+# spacings: 1 1 1
+# data file: $aneurism_rawfile_path
+# encoding: gzip
+# """)
+#     end
+#     imga = load(aneurism_file)
+#     @test eltype(imga) == UInt8
+#     @test size(imga) == (256,256,256)
+#     @test sdims(imga) == 3
+#     @test pixelspacing(imga) == (1.0,1.0,1.0)
 end
 
-gc()  # to close any mmapped files
+GC.gc()  # to close any mmapped files
 rm(workdir, recursive=true)
 
 nothing

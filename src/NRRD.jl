@@ -1,7 +1,6 @@
-__precompile__()
-
 module NRRD
 
+using Mmap, Printf
 # Packages needed to return the possible range of element types
 using FixedPointNumbers, Colors, ColorVectorSpace, StaticArrays, Quaternions
 # Other packages
@@ -9,11 +8,6 @@ using AxisArrays, ImageAxes, Unitful, MappedArrays
 using FileIO
 import Libz
 import FixedPointNumbers
-using Compat
-if VERSION < v"0.6.0-dev.2390"
-    using Ranges
-    const linspace = Ranges.linspace
-end
 
 using Colors: AbstractGray
 using AxisArrays: HasAxes
@@ -66,11 +60,11 @@ string2type = Dict(
 type2string(::Type{Float16}) = "float16"
 type2string(::Type{Float32}) = "float"
 type2string(::Type{Float64}) = "double"
-type2string{T<:Integer}(::Type{T}) = lowercase(string(T.name.name))
-type2string{T<:Unsigned,f}(::Type{Normed{T,f}}) = type2string(T)
-type2string{T}(::Type{T}) = type2string(eltype(T), T)
-type2string{T}(::Type{T}, ::Type{T}) = error("type $T unrecognized")
-type2string{T1,T2}(::Type{T1}, ::Type{T2}) = type2string(T1)
+type2string(::Type{T}) where {T<:Integer} = lowercase(string(T.name.name))
+type2string(::Type{Normed{T,f}}) where {T<:Unsigned,f} = type2string(T)
+type2string(::Type{T}) where {T} = type2string(eltype(T), T)
+type2string(::Type{T}, ::Type{T}) where {T} = error("type $T unrecognized")
+type2string(::Type{T1}, ::Type{T2}) where {T1,T2} = type2string(T1)
 
 space2axes = Dict(
     "right-anterior-superior" => (3,(:R,:A,:S)),
@@ -114,12 +108,12 @@ unit_string_dict = Dict("" => 1, "m" => u"m", "mm" => u"mm", "s" => u"s",
                         "um" => u"μm", "μm" => u"μm", "microns" => u"μm",
                         "pixel" => 1)
 
-immutable QString end                 # string with quotes around it: "mm"
-@compat VTuple{T} = Tuple{Vararg{T}}  # space-delimited tuple: 80 150
-immutable PTuple{T} end               # parenthesis-delimited tuple: (80,150)
-immutable StringPTuple{T} end         # string or PTuple{T}
+struct QString end                 # string with quotes around it: "mm"
+VTuple{T} = Tuple{Vararg{T}}  # space-delimited tuple: 80 150
+struct PTuple{T} end               # parenthesis-delimited tuple: (80,150)
+struct StringPTuple{T} end         # string or PTuple{T}
 
-immutable IntFloat end
+struct IntFloat end
 
 # This should list anything that DOESN'T parse to a string
 const parse_type = Dict(
@@ -240,14 +234,22 @@ function load(io::Stream{format"NRRD"}, Tuser::Type=Any; mode="r", mmap=:auto)
     end
 
     if do_mmap
-        A = Mmap.mmap(iodata, Array{Traw,length(szraw)}, szraw, position(iodata);
-                      grow=false)
+        # Recent Julia versions are picky about alignment
+        pos = position(iodata)
+        if pos % sizeof(Traw) != 0
+            szcor = (szraw[1]*sizeof(Traw), szraw[2:end]...)
+            A = reinterpret(Traw, Mmap.mmap(iodata, Array{UInt8,length(szraw)}, szcor, pos;
+                          grow=false))
+        else
+            A = Mmap.mmap(iodata, Array{Traw,length(szraw)}, szraw, pos;
+                          grow=false)
+        end
         if need_bswap
             f = mode == "r+" ? (bswap, bswap) : bswap
             A = mappedarray(f, A)
         end
     elseif header["encoding"] == "raw" || in(header["encoding"], ("gzip", "gz"))
-        A = read(iodata, Traw, szraw...)
+        A = read!(iodata, Array{Traw}(undef, szraw...))
         if need_bswap
             A = [bswap(a) for a in A]
         end
@@ -257,7 +259,7 @@ function load(io::Stream{format"NRRD"}, Tuser::Type=Any; mode="r", mmap=:auto)
 
     if perm == ()
         if T != eltype(A)
-            A = need_bswap ? A = mappedarray(x->T(x), A) : reinterpret(T, A, sz)
+            A = need_bswap ? A = mappedarray(x->T(x), A) : reshape(reinterpret(T, A), sz)
         end
     else
         A = permuteddimsview(A, perm)
@@ -276,7 +278,7 @@ function save(f::File{format"NRRD"}, img::AbstractArray; props::Dict = Dict{Stri
     end
 end
 
-function save{T}(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = Dict{String,Any}(), keyvals=nothing, comments=nothing)
+function save(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = Dict{String,Any}(), keyvals=nothing, comments=nothing) where T
     axs = axisinfo(img)
     header = headerinfo(T, axs)
     header_eltype!(header, T)
@@ -293,7 +295,7 @@ function save{T}(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = 
     if isempty(datafilename)
         nrrd_write(io, img)
     else
-        println(io, "data file: ", datafilename)
+        println(io.io, "data file: ", datafilename)
         if !get(props, "headeronly", false)
             open(datafilename, "w") do file
                 nrrd_write(file, img)
@@ -303,7 +305,7 @@ function save{T}(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = 
 end
 
 axisinfo(img) = axisinfo(HasAxes(img), img)
-axisinfo(::HasAxes{true}, img) = axes(img)
+axisinfo(::HasAxes{true}, img) = AxisArrays.axes(img)
 axisinfo(::HasAxes, img) = size(img)
 
 ### Interpreting header settings
@@ -351,11 +353,11 @@ function headerinfo(T, axs)
     header["endian"] = myendian()
     header["encoding"] = "raw"
     if T <: Gray
-        val = gray(one(T))
+        val = gray(oneunit(T))
         val = isa(val, FixedPoint) ? reinterpret(val) : val
         header["sample units"] = string("gray ", val)
     elseif T <: Union{RGB,RGBA}
-        val = red(one(T))
+        val = red(oneunit(T))
         val = isa(val, FixedPoint) ? reinterpret(val) : val
         valfmt = isa(val, Integer) ? 'd' : 'f'
         if T <: RGB
@@ -410,15 +412,15 @@ function headerinfo(T, axs)
     # Adjust the axes for color
     if T <: Colorant && !(T <: AbstractGray)
         header["dimension"] = length(axs)+1
-        unshift!(header["sizes"], length(T))
+        pushfirst!(header["sizes"], length(T))
         if haskey(header, "spacings")
-            unshift!(header["spacings"], NaN)
+            pushfirst!(header["spacings"], NaN)
         end
         if haskey(header, "labels")
-            unshift!(header["labels"], lowercase(string(T.name.name)))
+            pushfirst!(header["labels"], lowercase(string(T.name.name)))
         end
         if haskey(header, "units")
-            unshift!(header["units"], "")
+            pushfirst!(header["units"], "")
         end
         if !haskey(header, "kinds")
             header["kinds"] = ["domain" for d = 1:length(axs)]
@@ -434,7 +436,7 @@ function headerinfo(T, axs)
         else
             colkind = string(length(T), "-color")
         end
-        unshift!(header["kinds"], colkind)
+        pushfirst!(header["kinds"], colkind)
     end
     header
 end
@@ -476,9 +478,9 @@ function raw_eltype(header)
     Traw, need_bswap
 end
 
-raw_eltype{C<:Colorant}(::Type{C}) = raw_eltype(eltype(C))
-raw_eltype{T<:FixedPoint}(::Type{T})   = FixedPointNumbers.rawtype(T)
-raw_eltype{T}(::Type{T}) = T
+raw_eltype(::Type{C}) where {C<:Colorant} = raw_eltype(eltype(C))
+raw_eltype(::Type{T}) where {T<:FixedPoint}   = FixedPointNumbers.rawtype(T)
+raw_eltype(::Type{T}) where {T} = T
 
 """
     fixedtype(Traw, header) -> Tu
@@ -525,7 +527,7 @@ arbitrary string.
 
 If `Traw` cannot be interpreted as `Normed`, `Tu = Traw`.
 """
-function fixedtype{Traw<:Unsigned}(::Type{Traw}, header)
+function fixedtype(::Type{Traw}, header) where Traw<:Unsigned
     # Note that "max" is not useful in this context.
     # See https://sourceforge.net/p/teem/bugs/14/
     if haskey(header, "sample units")
@@ -535,8 +537,8 @@ function fixedtype{Traw<:Unsigned}(::Type{Traw}, header)
     else
         return Traw
     end
-    idxsplit = findfirst(su, ' ')
-    idxsplit == 0 && return Traw
+    idxsplit = findfirst(isequal(' '), su)
+    idxsplit === nothing && return Traw
     cm, rest = lowercase(su[1:idxsplit-1]), strip(su[idxsplit+1:end])
     if cm ∈ ("gray", "rgb", "rgba", "xyz", "hsv")
         # It looks like a whitepoint definition
@@ -553,9 +555,9 @@ function fixedtype{Traw<:Unsigned}(::Type{Traw}, header)
     end
     Traw
 end
-fixedtype{Traw}(::Type{Traw}, header) = Traw
+fixedtype(::Type{Traw}, header) where {Traw} = Traw
 
-function fixedtype_max{Traw<:Unsigned}(::Type{Traw}, mx)
+function fixedtype_max(::Type{Traw}, mx) where Traw<:Unsigned
     fmx = log2(mx+1)
     if round(fmx) == fmx
         return Normed{Traw,round(Int,fmx)}
@@ -564,32 +566,32 @@ function fixedtype_max{Traw<:Unsigned}(::Type{Traw}, mx)
 end
 
 header_eltype!(header, ::Type) = header
-function header_eltype!{T<:FixedPoint}(header, ::Type{T})
+function header_eltype!(header, ::Type{T}) where T<:FixedPoint
     header["sample units"] = string("gray ", reinterpret(one(T)))
     header
 end
-function header_eltype!{C<:Colorant}(header, ::Type{C})
+function header_eltype!(header, ::Type{C}) where C<:Colorant
     _header_eltype!(header, C, eltype(C))
     header
 end
-function _header_eltype!{C<:AbstractGray,T<:FixedPoint}(header, ::Type{C}, ::Type{T})
+function _header_eltype!(header, ::Type{C}, ::Type{T}) where {C<:AbstractGray,T<:FixedPoint}
     header["sample units"] = string("gray ", reinterpret(one(T)))
 end
-function _header_eltype!{C<:AbstractGray,T}(header, ::Type{C}, ::Type{T})
+function _header_eltype!(header, ::Type{C}, ::Type{T}) where {C<:AbstractGray,T}
     header["sample units"] = string("gray ", one(T))
 end
-function _header_eltype!{C<:AbstractRGB,T<:FixedPoint}(header, ::Type{C}, ::Type{T})
+function _header_eltype!(header, ::Type{C}, ::Type{T}) where {C<:AbstractRGB,T<:FixedPoint}
     o = reinterpret(one(T))
     header["sample units"] = "rgb ($o,$o,$o)"
 end
-function _header_eltype!{C<:AbstractRGB,T}(header, ::Type{C}, ::Type{T})
+function _header_eltype!(header, ::Type{C}, ::Type{T}) where {C<:AbstractRGB,T}
     o = one(T)
     header["sample units"] = "rgb ($o,$o,$o)"
 end
-function _header_eltype!{C<:XYZ}(header, ::Type{C}, ::Type)
+function _header_eltype!(header, ::Type{C}, ::Type) where C<:XYZ
     header["sample units"] = "xyz (95.047,100.000,108.883)"
 end
-function _header_eltype!{C<:HSV}(header, ::Type{C}, ::Type)
+function _header_eltype!(header, ::Type{C}, ::Type) where C<:HSV
     header["sample units"] = "hsv (360, 0, 1)"
 end
 
@@ -600,8 +602,8 @@ Return a valid "inner" element type `Tc` for colorant type `C`. When
 `T` != `Tc`, values must be "converted" before they can be interpreted
 as type `C`.
 """
-colorant_eltype{C<:Colorant, T<:AbstractFloat}(::Type{C}, ::Type{T}) = C{T}
-colorant_eltype{C<:Colorant, T}(::Type{C}, ::Type{T}) = C{Float32}
+colorant_eltype(::Type{C}, ::Type{T}) where {C<:Colorant, T<:AbstractFloat} = C{T}
+colorant_eltype(::Type{C}, ::Type{T}) where {C<:Colorant, T} = C{Float32}
 
 """
     UnknownColor{T,N}
@@ -609,7 +611,7 @@ colorant_eltype{C<:Colorant, T}(::Type{C}, ::Type{T}) = C{Float32}
 An unknown Color. This type gets returned when one of the "kind"
 settings is "3-color" or "4-color".
 """
-immutable UnknownColor{T,N} <: Color{T,N}
+struct UnknownColor{T,N} <: Color{T,N}
     col::NTuple{N,T}
 end
 
@@ -766,7 +768,7 @@ function get_axes(header, nd)
     if haskey(header, "labels")
         axnames = header["labels"]
         if any(istime)
-            for idx in find(istime)
+            for idx in findall(istime)
                 labelt = axnames[idx]
                 if !istimeaxis(Axis{Symbol(labelt)})
                     warn("label $labelt is not defined as a time axis, define it with `@traitimpl TimeAxis{Axis{:$labelt}}` (see ImageAxes for more information)")
@@ -792,8 +794,8 @@ function get_axes(header, nd)
         # the end of the first one
         for (k, n) in kindcounter
             if n > 1
-                idx = find(x->x==k, axnames)
-                axnames[idx] = string(k, '_', 1)
+                idx = findall(x->x==k, axnames)
+                axnames[idx] .= string(k, '_', 1)
             end
         end
     end
@@ -835,7 +837,7 @@ function get_axes(header, nd)
         rng = Any[startstepstop(first(r)*u, step(r)*u, last(r)*u) for (r,u) in zip(rng,ua)]
     elseif haskey(header, "space units")
         us = [get(unit_string_dict, x, 1) for x in header["space units"]]
-        ua = fill!(Array{Any}(nd), 1)
+        ua = fill!(Array{Any}(undef, nd), 1)
         copy_space!(ua, us, isspace)
         for d = 1:nd
             r, u = rng[d], ua[d]
@@ -872,8 +874,8 @@ Outputs:
 See also: write_header.
 """
 function parse_header(io)
-    version = ascii(String(read(io, UInt8, 4)))
-    skipchars(io,isspace)
+    version = ascii(String(read!(io, Vector{UInt8}(undef, 4))))
+    skipchars(isspace, io)
     header = Dict{String, Any}()
     keyvals = Dict{String, String}()
     comments = String[]
@@ -882,8 +884,8 @@ function parse_header(io)
     line = strip(readline(io))
     while !isempty(line)
         if line[1] != '#'
-            idx = findfirst(line, ':')
-            idx == 0 && error("no colon found in $line")
+            idx = findfirst(isequal(':'), line)
+            idx === nothing && error("no colon found in $line")
             key, value = line[1:idx-1], line[idx+1:end]
             if !isempty(value) && value[1] == '='
                 # This is a NRRD key/value pair, insert into keyvals
@@ -960,7 +962,7 @@ function write_header(io::IO, version, header, keyvals=nothing, comments=nothing
 end
 write_header(s::Stream{format"NRRD"}, args...) = write_header(stream(s), args...)
 
-nrrd_parse{T}(::Type{T}, str) = parse(T, str)  # fallback
+nrrd_parse(::Type{T}, str) where {T} = parse(T, str)  # fallback
 
 function nrrd_parse(::Type{IntFloat}, str)
     x = parse(Float64, str)
@@ -974,9 +976,9 @@ function nrrd_parse(::Type{QString}, str)
     str[2:end-1]
 end
 
-function nrrd_parse{T}(::Type{VTuple{T}}, s::AbstractString)
+function nrrd_parse(::Type{VTuple{T}}, s::AbstractString) where T
     ss = split(s)  # r"[ ,;]")
-    v = Vector{alloctype(T)}(length(ss))
+    v = Vector{alloctype(T)}(undef, length(ss))
     for i = 1:length(ss)
         v[i] = nrrd_parse(T, ss[i])
     end
@@ -988,18 +990,18 @@ function nrrd_parse(::Type{VTuple{QString}}, s::AbstractString)
     split(str, r"\" +\"")
 end
 
-function nrrd_parse{T}(::Type{PTuple{T}}, s::AbstractString)
+function nrrd_parse(::Type{PTuple{T}}, s::AbstractString) where T
     s[1] == '(' && s[end] == ')' || error("$s should begin and end parentheses")
     str = s[2:end-1]
-    ss = split(str, ',', keep=false)
-    v = Vector{alloctype(T)}(length(ss))
+    ss = split(str, ',', keepempty=false)
+    v = Vector{alloctype(T)}(undef, length(ss))
     for i = 1:length(ss)
         v[i] = nrrd_parse(T, ss[i])
     end
     return v
 end
 
-function nrrd_parse{T}(::Type{StringPTuple{T}}, s::AbstractString)
+function nrrd_parse(::Type{StringPTuple{T}}, s::AbstractString) where T
     if s[1] == '(' && s[end] == ')'
         return nrrd_parse(PTuple{T}, s)
     end
@@ -1012,13 +1014,13 @@ function writeversionstr(io, v::AbstractString)
     println(io, v)
 end
 
-nrrd_format{T}(io, ::Type{T}, x) = print(io, x)
+nrrd_format(io, ::Type{T}, x) where {T} = print(io, x)
 
 function nrrd_format(io, ::Type{QString}, str)
     print(io, '"', str, '"')
 end
 
-function nrrd_format{T}(io, ::Type{VTuple{T}}, container)
+function nrrd_format(io, ::Type{VTuple{T}}, container) where T
     isfirst = true
     for x in container
         if isfirst
@@ -1031,7 +1033,7 @@ function nrrd_format{T}(io, ::Type{VTuple{T}}, container)
     nothing
 end
 
-function nrrd_format{T}(io, ::Type{PTuple{T}}, container)
+function nrrd_format(io, ::Type{PTuple{T}}, container) where T
     print(io, '(')
     isfirst = true
     for x in container
@@ -1045,11 +1047,11 @@ function nrrd_format{T}(io, ::Type{PTuple{T}}, container)
     print(io, ')')
 end
 
-nrrd_format{T}(io, ::Type{StringPTuple{T}}, s::AbstractString) = nrrd_format(io, String, s)
-nrrd_format{T}(io, ::Type{StringPTuple{T}}, container) = nrrd_format(io, PTuple{T}, container)
+nrrd_format(io, ::Type{StringPTuple{T}}, s::AbstractString) where {T} = nrrd_format(io, String, s)
+nrrd_format(io, ::Type{StringPTuple{T}}, container) where {T} = nrrd_format(io, PTuple{T}, container)
 
-alloctype{T}(::Type{T}) = T
-alloctype{T}(::Type{StringPTuple{T}}) = Any # Union{String,Vector{T}}
+alloctype(::Type{T}) where {T} = T
+alloctype(::Type{StringPTuple{T}}) where {T} = Any # Union{String,Vector{T}}
 alloctype(::Type{IntFloat}) = Union{Int,Float64}
 
 ### Utilities
@@ -1086,20 +1088,20 @@ function startstepstop(min, stepval, max)
     startstopsteplen(min, max, stepval, len)
 end
 
-function startstopsteplen{T<:Integer}(min::T, max::T, stepval::T, len)
+function startstopsteplen(min::T, max::T, stepval::T, len) where T<:Integer
     stepval == 1 ? (min:max) : (min:stepval:max)
 end
-function startstopsteplen{T<:AbstractFloat}(min::T, max::T, stepval::T, len)
+function startstopsteplen(min::T, max::T, stepval::T, len) where T<:AbstractFloat
     imin, imax, istepval = round(Int, min), round(Int, max), round(Int, stepval)
     if min ≈ imin && max ≈ imax && stepval ≈ istepval
         return startstopsteplen(imin, imax, istepval, len)
     end
-    r = linspace(min, max, len)
+    r = range(min, stop=max, length=len)
     abs(step(r)/stepval - 1) < 0.01 || error("wanted length $len from $min to $max, got $r of length $(length(r))")
     r
 end
-function startstopsteplen{T}(min::T, max::T, stepval::T, len)
-    r = linspace(min, max, len)
+function startstopsteplen(min::T, max::T, stepval::T, len) where T
+    r = range(min, stop=max, length=len)
     abs(step(r)/stepval - 1) < 0.01 || error("wanted length $len from $min to $max, got $r of length $(length(r))")
     r
 end
@@ -1221,8 +1223,8 @@ end
 
 nrrd_write(io, A::AxisArray) = nrrd_write(io, A.data)
 nrrd_write(io, A::AbstractArray) = nrrd_write_elty(io, A)
-nrrd_write_elty{C<:Colorant}(io, A::AbstractArray{C}) = nrrd_write_elty(io, channelview(A))
-nrrd_write_elty{T<:FixedPoint}(io, A::AbstractArray{T}) = nrrd_write_elty(io, rawview(A))
+nrrd_write_elty(io, A::AbstractArray{C}) where {C<:Colorant} = nrrd_write_elty(io, channelview(A))
+nrrd_write_elty(io, A::AbstractArray{T}) where {T<:FixedPoint} = nrrd_write_elty(io, rawview(A))
 nrrd_write_elty(io, A::AbstractArray) = write(io, A)
 
 function numberparse(str)
