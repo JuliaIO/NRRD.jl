@@ -146,8 +146,7 @@ include("unu-make.jl")
         @test img == imgc
 
         # With units
-        img = AxisArray(rand(N0f16, 5, 7), (:y, :x), (1.0u"mm", 1.2u"mm"))
-        outname = joinpath(writedir, "imagemeta.nhdr")
+        img = AxisArray(img, (:y, :x), (1.0u"mm", 1.2u"mm"))
         save(outname, img)
         imgc = load(outname)
         @test img == imgc
