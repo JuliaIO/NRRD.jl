@@ -144,6 +144,19 @@ include("unu-make.jl")
         save(outname, img)
         imgc = load(outname)
         @test img == imgc
+
+        # With units
+        img = AxisArray(img, (:y, :x), (1.0u"mm", 1.2u"mm"))
+        save(outname, img)
+        imgc = load(outname)
+        @test img == imgc
+        @test pixelspacing(imgc) == (1.0u"mm", 1.2u"mm")
+        img = ImageMeta(img, info=false)
+        save(outname, img)
+        imgc = load(outname)
+        @test img == imgc
+        @test AxisArrays.HasAxes(img) isa AxisArrays.HasAxes{true}
+        @test pixelspacing(imgc) == (1.0u"mm", 1.2u"mm")
     end
 
     GC.gc()  # to close any mmapped files

@@ -271,16 +271,16 @@ function load(io::Stream{format"NRRD"}, Tuser::Type=Any; mode="r", mmap=:auto)
     isa(axs, Dims) ? A : AxisArray(A, axs)
 end
 
-function save(f::File{format"NRRD"}, img::AbstractArray; props::Dict = Dict{String,Any}(), keyvals=nothing, comments=nothing)
+function save(f::File{format"NRRD"}, img::AbstractArray; kwargs...)
     open(f, "w") do io
         write(io, magic(format"NRRD"))
-        save(io, img; props=props, keyvals=keyvals, comments=comments)
+        save(io, img; kwargs...)
     end
 end
 
-function save(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = Dict{String,Any}(), keyvals=nothing, comments=nothing) where T
+function save(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = Dict{String,Any}(), keyvals=nothing, comments=nothing, kwargs...) where T
     axs = axisinfo(img)
-    header = headerinfo(T, axs)
+    header = headerinfo(T, axs; kwargs...)
     header_eltype!(header, T)
     # copy fields from props to override those in header
     for (k, v) in props
@@ -378,6 +378,7 @@ function headerinfo(T, axs)
     if isa(axs, Base.Indices)
         axs = map(length, axs)
     end
+    specifyorientation = false
     if isa(axs, Dims)
         header["sizes"] = [axs...]
     else
@@ -387,8 +388,7 @@ function headerinfo(T, axs)
         isspace = map(s->!startswith(string(s), "time"), axnames)
         if haskey(axes2space, axnames)
             header["space"] = axes2space[axnames]
-        else
-            header["space dimension"] = sum(isspace)
+            specifyorientation = true
         end
         header["kinds"] = [isspc ? "domain" : "time" for isspc in isspace]
         if !all(isdefaultname, axnames)
@@ -402,10 +402,14 @@ function headerinfo(T, axs)
             header["units"] = [unitstr...]
         end
         if !all(x->x==1, spacing)
-            header["spacings"] = [spacing...]
+            if specifyorientation
+                header["space directions"] = [ntuple(d->d==i ? spacing[i] : 0, length(spacing)) for i = 1:length(spacing)]
+            else
+                header["spacings"] = [Float64.(spacing)...]
+            end
         end
         origin = map(x->isa(x, Quantity) ? ustrip(x) : x, map(first, rng))
-        if any(x->x!=0, origin)
+        if specifyorientation && any(x->x!=0, origin)
             header["space origin"] = [origin[[isspace...]]...]
         end
     end
