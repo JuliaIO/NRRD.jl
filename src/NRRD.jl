@@ -230,7 +230,7 @@ function load(io::Stream{format"NRRD"}, Tuser::Type=Any; mode="r", mmap=:auto)
     do_mmap |= can_mmap && (mmap == true)
 
     if !compressed
-        szraw = checked_size(Traw, szraw, sz, iodata)
+        szraw, sz = checked_size(Traw, szraw, sz, iodata)
     end
 
     if do_mmap
@@ -775,7 +775,7 @@ function get_axes(header, nd)
             for idx in findall(istime)
                 labelt = axnames[idx]
                 if !istimeaxis(Axis{Symbol(labelt)})
-                    warn("label $labelt is not defined as a time axis, define it with `@traitimpl TimeAxis{Axis{:$labelt}}` (see ImageAxes for more information)")
+                    @warn("label $labelt is not defined as a time axis, define it with `@traitimpl TimeAxis{Axis{:$labelt}}` (see ImageAxes for more information)")
                 end
             end
         end
@@ -1188,10 +1188,10 @@ function checked_size(Traw, szraw, sz, iodata)
             sznew[k] = div(datalen, strds[k])
         end
         tsznew = (sznew...,)
-        warn("header indicates an array size $szraw, but the file size is consistent with at most $tsznew")
-        szraw = tsznew
+        @warn("header indicates an array size $szraw, but the file size is consistent with at most $tsznew")
+        szraw = sz = tsznew
     end
-    szraw
+    szraw, sz
 end
 
 function stream2name(s::IO)
