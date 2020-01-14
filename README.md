@@ -1,8 +1,7 @@
 # NRRD
-[![NRRD](http://pkg.julialang.org/badges/NRRD_0.4.svg)](http://pkg.julialang.org/?pkg=NRRD)
-[![NRRD](http://pkg.julialang.org/badges/NRRD_0.5.svg)](http://pkg.julialang.org/?pkg=NRRD)
 [![Build Status](https://travis-ci.org/JuliaIO/NRRD.jl.svg?branch=master)](https://travis-ci.org/JuliaIO/NRRD.jl)
 [![codecov.io](http://codecov.io/github/JuliaIO/NRRD.jl/coverage.svg?branch=master)](http://codecov.io/github/JuliaIO/NRRD.jl?branch=master)
+[![PkgEval][pkgeval-img]][pkgeval-url]
 
 Package for reading NRRD files.
 Implements the  [FileIO](https://github.com/JuliaIO/FileIO.jl) interface.
@@ -42,3 +41,6 @@ open("mydata.nhdr", "w") do io
     NRRD.write_header(io, "0004", header)
 end
 ```
+
+[pkgeval-img]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/N/NRRD.svg
+[pkgeval-url]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/report.html
