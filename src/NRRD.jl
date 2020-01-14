@@ -2,17 +2,15 @@ module NRRD
 
 using Mmap, Printf
 # Packages needed to return the possible range of element types
-using FixedPointNumbers, Colors, ColorVectorSpace, StaticArrays, Quaternions
+using ImageCore, ColorVectorSpace, StaticArrays, Quaternions
 # Other packages
 using AxisArrays, ImageAxes, Unitful, MappedArrays
 using FileIO
 import Libz
-import FixedPointNumbers
 
-using Colors: AbstractGray
 using AxisArrays: HasAxes
 
-string2type = Dict(
+const string2type = Dict(
     "signed char" => Int8,
     "int8" => Int8,
     "int8_t" => Int8,
@@ -66,7 +64,7 @@ type2string(::Type{T}) where {T} = type2string(eltype(T), T)
 type2string(::Type{T}, ::Type{T}) where {T} = error("type $T unrecognized")
 type2string(::Type{T1}, ::Type{T2}) where {T1,T2} = type2string(T1)
 
-space2axes = Dict(
+const space2axes = Dict(
     "right-anterior-superior" => (3,(:R,:A,:S)),
     "ras" => (3,(:R,:A,:S)),
     "left-anterior-superior" => (3,(:L,:A,:S)),
@@ -104,9 +102,9 @@ const axes2space = Dict(
 # We put these in a dict so that we don't eval untrusted
 # strings. Please submit PRs to add to this list if you need
 # additional unit support.
-unit_string_dict = Dict("" => 1, "m" => u"m", "mm" => u"mm", "s" => u"s",
-                        "um" => u"μm", "μm" => u"μm", "microns" => u"μm",
-                        "pixel" => 1)
+const unit_string_dict = Dict("" => 1, "m" => u"m", "mm" => u"mm", "s" => u"s",
+                              "um" => u"μm", "μm" => u"μm", "microns" => u"μm",
+                              "pixel" => 1)
 
 struct QString end                 # string with quotes around it: "mm"
 VTuple{T} = Tuple{Vararg{T}}  # space-delimited tuple: 80 150
@@ -620,7 +618,7 @@ struct UnknownColor{T,N} <: Color{T,N}
 end
 
 """
-    outer_eltype!(header, Traw) -> T, nd, perm
+    T, nd, perm = outer_eltype!(header, Traw)
 
 Extract the julia array `eltype` `T`, the number of dimensions `nd`
 **excluding** color/complex/vector/matrix element data, and any
@@ -1055,6 +1053,7 @@ nrrd_format(io, ::Type{StringPTuple{T}}, s::AbstractString) where {T} = nrrd_for
 nrrd_format(io, ::Type{StringPTuple{T}}, container) where {T} = nrrd_format(io, PTuple{T}, container)
 
 alloctype(::Type{T}) where {T} = T
+alloctype(::Type{PTuple{T}}) where {T} = Any
 alloctype(::Type{StringPTuple{T}}) where {T} = Any # Union{String,Vector{T}}
 alloctype(::Type{IntFloat}) = Union{Int,Float64}
 

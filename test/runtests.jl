@@ -1,4 +1,4 @@
-using FileIO, FixedPointNumbers, ColorTypes, Unitful, AxisArrays, ImageAxes, ImageMetadata
+using FileIO, ImageCore, Unitful, AxisArrays, ImageAxes, ImageMetadata
 using Test, Base.CoreLogging
 
 include("unu-make.jl")
@@ -178,6 +178,11 @@ include("unu-make.jl")
             record = logger.logs[1]
             @test occursin("header indicates an array size (5, 7, 3), but the file size is consistent with at most (5, 7, 2)", record.message)
         end
+    end
+
+    @testset "Extended eltype" begin
+        img = load(joinpath(dirname(@__FILE__), "io", "test_helix.nrrd"))
+        @test axisnames(img)[end-2:end] == (:R, :A, :S)
     end
 
     GC.gc()  # to close any mmapped files

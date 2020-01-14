@@ -1,4 +1,4 @@
-using FileIO, FixedPointNumbers, Colors, ImageCore, Test, Statistics
+using FileIO, ImageCore, Test, Statistics
 
 workdir = joinpath(tempdir(), "ImagesNRRD")
 isdir(workdir) || mkdir(workdir)

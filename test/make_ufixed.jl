@@ -1,4 +1,4 @@
-using FileIO, NRRD, FixedPointNumbers, Colors
+using FileIO, NRRD, ImageCore
 
 Alast = nothing
 for (A, name) in ((rand(UInt8, 3, 5), "uint8"),

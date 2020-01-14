@@ -1,5 +1,5 @@
 # Test headers written by `unu make`
-using NRRD, FileIO, Colors, AxisArrays, ImageAxes, Unitful, SimpleTraits
+using NRRD, FileIO, ImageCore, AxisArrays, ImageAxes, Unitful, SimpleTraits
 using Test
 
 headerpath = joinpath(dirname(@__FILE__), "headers")
