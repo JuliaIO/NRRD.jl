@@ -180,6 +180,11 @@ include("unu-make.jl")
         end
     end
 
+    @testset "Extended eltype" begin
+        img = load(joinpath(dirname(@__FILE__), "io", "test_helix.nrrd"))
+        @test axisnames(img)[end-2:end] == (:R, :A, :S)
+    end
+
     GC.gc()  # to close any mmapped files
     try
         rm(workdir, recursive=true)
