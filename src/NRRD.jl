@@ -2,14 +2,12 @@ module NRRD
 
 using Mmap, Printf
 # Packages needed to return the possible range of element types
-using FixedPointNumbers, Colors, ColorVectorSpace, StaticArrays, Quaternions
+using ImageCore, ColorVectorSpace, StaticArrays, Quaternions
 # Other packages
 using AxisArrays, ImageAxes, Unitful, MappedArrays
 using FileIO
 import Libz
-import FixedPointNumbers
 
-using Colors: AbstractGray
 using AxisArrays: HasAxes
 
 const string2type = Dict(

@@ -1,4 +1,4 @@
-using FileIO, FixedPointNumbers, ColorTypes, Unitful, AxisArrays, ImageAxes, ImageMetadata
+using FileIO, ImageCore, Unitful, AxisArrays, ImageAxes, ImageMetadata
 using Test, Base.CoreLogging
 
 include("unu-make.jl")

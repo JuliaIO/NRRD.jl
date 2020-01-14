@@ -25,7 +25,7 @@ just the header. Assuming you want to save "rich" axis information, a
 low-level approach using AxisArrays is the following:
 
 ```julia
-using NRRD, FileIO, FixedPointNumbers, AxisArrays, Unitful
+using NRRD, FileIO, ImageCore, AxisArrays, Unitful
 using Unitful: μm, s
 
 # For a 480x640x200 image with time as the third axis,
