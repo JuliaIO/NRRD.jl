@@ -1,7 +1,7 @@
 name = "NRRD"
 uuid = "9bb6cfbd-7763-5393-b1b5-1c8e09872146"
 authors = ["Tim Holy <tim.holy@gmail.com>"]
-version = "0.6.0"
+version = "0.6.1"
 
 [deps]
 AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
@@ -27,7 +27,7 @@ Libz = "1"
 MappedArrays = "0.2"
 Quaternions = "0.4"
 StaticArrays = "0.11, 0.12"
-Unitful = "0.14, 0.15, 0.16, 0.17, 0.18"
+Unitful = "0.14, 0.15, 0.16, 0.17, 0.18, 1"
 julia = "1"
 
 [extras]
