@@ -6,7 +6,7 @@ using ImageCore, ColorVectorSpace, StaticArrays, Quaternions
 # Other packages
 using AxisArrays, ImageAxes, Unitful, MappedArrays
 using FileIO
-import Libz
+using CodecZlib
 
 using AxisArrays: HasAxes
 
@@ -214,7 +214,7 @@ function load(io::Stream{format"NRRD"}, Tuser::Type=Any; mode="r", mmap=:auto)
     iodata = find_datafile(io, header; mode=mode)
     compressed = in(header["encoding"], ("gzip", "gz"))
     if compressed
-        iodata = Libz.ZlibInflateInputStream(iodata)
+        iodata = GzipDecompressorStream(iodata)
     end
 
     can_mmap = header["encoding"] == "raw"
