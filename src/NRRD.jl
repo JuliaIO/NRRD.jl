@@ -260,7 +260,7 @@ function load(io::Stream{format"NRRD"}, Tuser::Type=Any; mode="r", mmap=:auto)
             A = need_bswap ? A = mappedarray(x->T(x), A) : reshape(reinterpret(T, A), sz)
         end
     else
-        A = permuteddimsview(A, perm)
+        A = PermutedDimsArray(A, perm)
         if T<:Color
             A = colorview(T, A)
         end
