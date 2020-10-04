@@ -1,7 +1,7 @@
 name = "NRRD"
 uuid = "9bb6cfbd-7763-5393-b1b5-1c8e09872146"
 authors = ["Tim Holy <tim.holy@gmail.com>"]
-version = "0.6.1"
+version = "0.6.2"
 
 [deps]
 AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
