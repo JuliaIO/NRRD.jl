@@ -29,7 +29,7 @@ end
     imgc = load(foolc_file, RGB)
     @test eltype(imgc) == RGB{N0f8}
     @test size(imgc) == (128,128)
-    imgg = convert(Array{Gray}, imgc)
+    imgg = Gray.(imgc)
     @test mean(abs.(Int.(rawview(channelview(imgg))) - Int.(imgu))) < 12
 #     aneurism_rawfile = getfile("aneurism.raw.gz", base3D)
 #     aneurism_file = joinpath(workdir, "aneurism.nhdr")
