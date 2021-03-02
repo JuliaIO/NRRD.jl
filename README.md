@@ -1,5 +1,5 @@
 # NRRD
-[![Build Status](https://travis-ci.org/JuliaIO/NRRD.jl.svg?branch=master)](https://travis-ci.org/JuliaIO/NRRD.jl)
+[![Build status](https://github.com/JuliaIO/NRRD.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/JuliaIO/NRRD.jl/actions/workflows/CI.yml)
 [![codecov.io](http://codecov.io/github/JuliaIO/NRRD.jl/coverage.svg?branch=master)](http://codecov.io/github/JuliaIO/NRRD.jl?branch=master)
 [![PkgEval][pkgeval-img]][pkgeval-url]
 
