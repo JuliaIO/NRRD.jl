@@ -2,13 +2,13 @@ using FileIO, ImageCore, Test, Statistics
 
 workdir = joinpath(tempdir(), "ImagesNRRD")
 isdir(workdir) || mkdir(workdir)
-const teembase = "http://teem.sourceforge.net/nrrd/files"
-const base3D   = "http://www.tc18.org/code_data_set/3D_greyscale"
+const teembase = "http://teem.sourceforge.net/nrrd/files/"
+const base3D   = "http://www.tc18.org/code_data_set/3D_greyscale/"
 
 function getfile(name, base=teembase)
     file = joinpath(workdir, name)
     if !isfile(file)
-        file = download(joinpath(base, name), file)
+        file = download(base * name, file)
     end
     file
 end
