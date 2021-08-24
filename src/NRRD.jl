@@ -2,7 +2,7 @@ module NRRD
 
 using Mmap, Printf
 # Packages needed to return the possible range of element types
-using ImageCore, ColorVectorSpace, StaticArrays, Quaternions
+using ImageCore, StaticArrays, Quaternions
 # Other packages
 using AxisArrays, ImageAxes, Unitful, MappedArrays
 using FileIO
