@@ -58,7 +58,12 @@ const string2type = Dict(
 type2string(::Type{Float16}) = "float16"
 type2string(::Type{Float32}) = "float"
 type2string(::Type{Float64}) = "double"
-type2string(::Type{T}) where {T<:Integer} = lowercase(string(T.name.name))
+type2string(::Type{Bool})    = "uint8"   # bool is not supported
+function type2string(::Type{T}) where {T<:Integer}
+    str = lowercase(string(T.name.name))
+    haskey(string2type, str) && return str
+    error("integer type $T not supported")
+end
 type2string(::Type{Normed{T,f}}) where {T<:Unsigned,f} = type2string(T)
 type2string(::Type{T}) where {T} = type2string(eltype(T), T)
 type2string(::Type{T}, ::Type{T}) where {T} = error("type $T unrecognized")

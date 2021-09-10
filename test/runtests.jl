@@ -102,6 +102,18 @@ include("unu-make.jl")
         end
     end
 
+    @testset "bool" begin
+        # Bool is not one of the supported eltypes in the `type` field of
+        # http://teem.sourceforge.net/nrrd/format.html.
+        # Make sure we don't do something wrong
+        fn = joinpath(writedir, "eltype_bool.nrrd")
+        img = rand(Bool, 5, 6)
+        save(fn, img)
+        imgr = load(fn)
+        @test imgr == img
+        # We don't insist on eltype(imgr) == Bool
+    end
+
     @testset "Mmapped" begin
         fn = joinpath(writedir, "volume.nrrd")
         save(fn, zeros(UInt8,500,500,500))
