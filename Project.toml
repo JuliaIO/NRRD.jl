@@ -4,12 +4,10 @@ authors = ["Tim Holy <tim.holy@gmail.com>"]
 version = "0.6.3"
 
 [deps]
-AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 ImageAxes = "2803e5a7-5153-5ecf-9a86-9b4c37f5f5ac"
 ImageCore = "a09fc81d-aa75-5fe9-8630-4744c3626534"
-MappedArrays = "dbb5928d-eab1-5f90-85c2-b9b0edb7c900"
 Mmap = "a63ad114-7e13-5084-954f-fe012c677804"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Quaternions = "94ee1d12-ae83-5a48-8b1c-48b8ff168ae0"
@@ -17,12 +15,10 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
-AxisArrays = "0.3, 0.4"
 CodecZlib = "0.6, 0.7"
 FileIO = "1"
 ImageAxes = "0.6"
 ImageCore = "0.9"
-MappedArrays = "0.2, 0.3, 0.4"
 Quaternions = "0.4"
 StaticArrays = "0.11, 0.12, 1"
 Unitful = "0.14, 0.15, 0.16, 0.17, 0.18, 1"

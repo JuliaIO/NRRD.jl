@@ -4,11 +4,13 @@ using Mmap, Printf
 # Packages needed to return the possible range of element types
 using ImageCore, StaticArrays, Quaternions
 # Other packages
-using AxisArrays, ImageAxes, Unitful, MappedArrays
+using ImageCore.MappedArrays
+using ImageAxes, Unitful
+using ImageAxes.AxisArrays
 using FileIO
 using CodecZlib
 
-using AxisArrays: HasAxes
+using ImageAxes.AxisArrays: HasAxes
 
 const string2type = Dict(
     "signed char" => Int8,
