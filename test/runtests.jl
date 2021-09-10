@@ -1,4 +1,5 @@
-using FileIO, ImageCore, Unitful, AxisArrays, ImageAxes, ImageMetadata
+using FileIO, ImageCore, Unitful, ImageAxes, ImageMetadata
+using ImageAxes.AxisArrays
 using Test, Base.CoreLogging
 
 struct UnsupportedInt16 <: Signed
