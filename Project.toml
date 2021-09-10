@@ -1,7 +1,7 @@
 name = "NRRD"
 uuid = "9bb6cfbd-7763-5393-b1b5-1c8e09872146"
 authors = ["Tim Holy <tim.holy@gmail.com>"]
-version = "0.6.3"
+version = "0.6.4"
 
 [deps]
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
