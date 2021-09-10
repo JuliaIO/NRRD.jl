@@ -1,6 +1,15 @@
 using FileIO, ImageCore, Unitful, AxisArrays, ImageAxes, ImageMetadata
 using Test, Base.CoreLogging
 
+struct UnsupportedInt16 <: Signed
+    val::Int16
+end
+Base.flipsign(x::UnsupportedInt16, y::UnsupportedInt16) = UnsupportedInt16(flipsign(x.val, y.val))
+Base.Unsigned(x::UnsupportedInt16) = Unsigned(x.val)
+Base.UInt16(x::UnsupportedInt16) = UInt16(x.val)
+Base.Int(x::UnsupportedInt16) = Int(x.val)
+Base.promote_rule(::Type{UnsupportedInt16}, ::Type{Int}) = Int
+
 include("unu-make.jl")
 
 @testset "NRRD" begin
@@ -100,6 +109,23 @@ include("unu-make.jl")
             imgr = load(outname)
             @test eltype(imgr) == elty
         end
+    end
+
+    @testset "bool" begin
+        # Bool is not one of the supported eltypes in the `type` field of
+        # http://teem.sourceforge.net/nrrd/format.html.
+        # Make sure we don't do something wrong
+        fn = joinpath(writedir, "eltype_bool.nrrd")
+        img = rand(Bool, 5, 6)
+        save(fn, img)
+        imgr = load(fn)
+        @test imgr == img
+        # We don't insist on eltype(imgr) == Bool
+        img = UnsupportedInt16[1 2; 3 4]
+        @info "The following error is expected"
+        fn = joinpath(writedir, "eltype_unsupported.nrrd")
+        ex = try save(fn, img) catch e e end
+        @test ex.ex == ErrorException("integer type UnsupportedInt16 not supported")
     end
 
     @testset "Mmapped" begin
