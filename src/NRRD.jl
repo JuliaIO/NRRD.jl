@@ -291,7 +291,7 @@ function save(io::Stream{format"NRRD"}, img::AbstractArray{T}; props::Dict = Dic
     for (k, v) in props
         header[k] = v
     end
-    v = version(header, !(keyvals==nothing || isempty(keyvals)))
+    v = version(header, !(keyvals === nothing || isempty(keyvals)))
     write_header(io, v, header, keyvals, comments)
     datafilename = get(props, "datafile", "")
     if isempty(datafilename)
@@ -956,18 +956,19 @@ function write_header(io::IO, version, header, keyvals=nothing, comments=nothing
             println(io, "")
         end
     end
-    if keyvals != nothing
+    if keyvals !== nothing
         for (k,v) in keyvals
             println(io, k, ":=", v)
         end
     end
-    if comments != nothing
+    if comments !== nothing
         for c in comments
             println(io, "# ", c)
         end
     end
+
     println(io)
-    nothing
+    return nothing
 end
 write_header(s::Stream{format"NRRD"}, args...) = write_header(stream(s), args...)
 
@@ -1212,7 +1213,7 @@ function find_datafile(iodata::IOStream, header; mode="r", path=nothing)
     if haskey(header, "data file") || haskey(header, "datafile")
         # Separate header and data files
         fdata = haskey(header, "data file") ? header["data file"] : header["datafile"]
-        if path == nothing
+        if path === nothing
             # Check current directory first
             if isfile(fdata)
                 iodata = open(fdata)
