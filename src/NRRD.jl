@@ -1084,6 +1084,9 @@ function startstoplen(min::Integer, max::Integer, len::Integer)
 end
 
 function startstoplen(min, max, len)
+    if max-min ≈ len-1
+        return min:max
+    end
     stepval = (max-min)/(len-1)
     startstopsteplen(min, max, stepval, len)
 end
