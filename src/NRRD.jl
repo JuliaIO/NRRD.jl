@@ -742,51 +742,63 @@ function get_axes(header, nd)
     else
         sd = get(header, "space dimension", nd)
     end
+
     for f in per_spacedim
         if haskey(header, f)
             length(header[f]) == sd || error("expected $sd dimensions in field $f, got $(header[f])")
         end
     end
+
     ## Test whether we have fields that require an AxisArray
     axes_fields = setdiff(per_axis, ["sizes", "kinds", "centers", "centerings"])
     need_axes = haskey(header, "space")
     for f in axes_fields
         need_axes |= haskey(header, f)
     end
+
     # also check for a time axis
-    istime = falses(nd)
-    isspace = falses(nd)
+    is_time = falses(nd)
+    is_space = falses(nd)
+
     if haskey(header, "kinds")
         kinds = header["kinds"]
-        istime = map(x->x=="time", kinds)
-        isspace = map(x->x=="space" || x=="domain", kinds)
-        need_axes |= any(istime)
+        is_time = map(x->x=="time", kinds)
+        is_space = map(x->x=="space" || x=="domain", kinds)
+        need_axes |= any(is_time)
+
     elseif haskey(header, "space dimension")
-        length(isspace) == sd || error("confused, have \"space dimension\" $sd but got $nd dimensions: $header")
-        fill!(isspace, true)
+        length(is_space) == sd || error("confused, have \"space dimension\" $sd but got $nd dimensions: $header")
+        fill!(is_space, true)
+
     elseif haskey(header, "space")
         nd == sd || error("confused, have \"space\" but can't tell which axes are spatial: $header")
-        fill!(isspace, true)
+        fill!(is_space, true)
     end
-    sz = header["sizes"]
+
+    # early exit if we don't need axes
+    sz = (header["sizes"]...,)
     if !need_axes
-        return (sz...,)
+        return sz
     end
+
     ## Axis names
     axnames = [string("dim_", d) for d = 1:nd]
+
     if haskey(header, "labels")
         axnames = header["labels"]
-        if any(istime)
-            for idx in findall(istime)
+        if any(is_time)
+            for idx in findall(is_time)
                 labelt = axnames[idx]
                 if !istimeaxis(Axis{Symbol(labelt)})
                     @warn("label $labelt is not defined as a time axis, define it with `@traitimpl TimeAxis{Axis{:$labelt}}` (see ImageAxes for more information)")
                 end
             end
         end
+
     elseif haskey(header, "space")
         spcnames = map(string, space2axes[lowercase(header["space"])][2])
-        copy_space!(axnames, spcnames, isspace)
+        copy_space!(axnames, spcnames, is_space)
+
     elseif haskey(header, "kinds")
         # Give axes default names based on their kind: space1, space2, etc.
         kindcounter = Dict{String,Int}()
@@ -808,56 +820,79 @@ function get_axes(header, nd)
             end
         end
     end
+
     ## Ranges
     # Can a "space directions" field be encoded as a "spacings" field?
     if haskey(header, "space directions")
         can_convert, spc = spacings(header["space directions"])
+
         if all(isnan, spc)
             # they were all "none"
             delete!(header, "space directions")
             can_convert = false
         end
+
         if can_convert
             !haskey(header, "spacings") || error("cannot have both \"space directions\" and \"spacings\"")
             header["spacings"] = spc
             delete!(header, "space directions")
         end
     end
+
     if haskey(header, "axis mins") || haskey(header, "axismins")
         axmin = haskey(header, "axis mins") ? header["axis mins"] : header["axismins"]
         axmax = haskey(header, "axis maxs") ? header["axis maxs"] : header["axismaxs"]
-        rng = Any[startstoplen(axmin[d], axmax[d], sz[d]) for d = 1:nd]
+        rng = ntuple(d -> range(axmin[d], stop=axmax[d], length=sz[d]), nd)
+
     else
-        startval = Any[zeros(Int, nd)...]
-        stepval = Any[ones(Int, nd)...]
-        if haskey(header, "space origin")
-            so = header["space origin"]
-            copy_space!(startval, header["space origin"], isspace)
+        startval = get(() -> zeros(Int, nd), header, "space origin")
+        stepval = get(() -> ones(Int, nd), header, "spacings")
+
+        i = 0
+        rng = ntuple(nd) do d
+            sta = is_space[d] ? startval[i += 1] : 0
+            ste = isnan(stepval[d]) ? 1 : stepval[d]
+            len = sz[d]
+
+            if len == 1
+                range(sta, length=1)
+            elseif ste == 1
+                range(sta, length=len)
+            else
+                range(sta, step=ste, length=len)
+            end
         end
-        if haskey(header, "spacings")
-            copy_not_nan!(stepval, header["spacings"])
-        end
-        rng = Any[startsteplen(startval[d], stepval[d], sz[d]) for d = 1:nd]
     end
-    # These are more laborious than they should be because of issues
-    # with rounding and ranges in julia-0.5.
+
     if haskey(header, "units")
-        ua = [unit_string_dict[x] for x in header["units"]]
-        rng = Any[startstepstop(first(r)*u, step(r)*u, last(r)*u) for (r,u) in zip(rng,ua)]
+        us = header["units"]
+        rng = ntuple(min(length(us), nd)) do d
+            u = unit_string_dict[us[d]]
+            if u isa Unitful.Units
+                float(rng[d])*u
+            else
+                rng[d]
+            end
+        end
+
     elseif haskey(header, "space units")
-        us = [get(unit_string_dict, x, 1) for x in header["space units"]]
-        ua = fill!(Array{Any}(undef, nd), 1)
-        copy_space!(ua, us, isspace)
-        for d = 1:nd
-            r, u = rng[d], ua[d]
-            newr = startstepstop(first(r)*u, step(r)*u, last(r)*u)
-            rng[d] = newr
+        us = header["space units"]
+        i = 0
+        rng = ntuple(nd) do d
+            u = is_space[d] ? get(unit_string_dict, us[i += 1], nothing) : nothing
+            if u isa Unitful.Units
+                float(rng[d])*u
+            else
+                rng[d]
+            end
         end
     end
+
     l = map(safelength, rng)
     l == sz || error("expect axis lengths to match array sizes, got $((rng...,)) of length $l and $sz")
+
     # Return the axes
-    ntuple(d->Axis{Symbol(axnames[d])}(rng[d]), nd)
+    return ntuple(d -> Axis{Symbol(axnames[d])}(rng[d]), nd)
 end
 
 get_size(sz::Dims) = sz
@@ -1072,79 +1107,15 @@ function chksize(sz, sztarget)
     nothing
 end
 
-function startstoplen(min::Integer, max::Integer, len::Integer)
-    if max-min == len-1
-        return Int(min):Int(max)
+function copy_space!(dest, src, is_space)
+    length(src) == sum(is_space) || throw(DimensionMismatch("src length $(length(src)) disagrees with isspace $is_space"))
+    length(dest) == length(is_space) || throw(DimensionMismatch("dest length $(length(dest)) does not agree with is_space of length $(length(is_space))"))
+    j = 0
+    for i in eachindex(dest, is_space)
+        is_space[i] || continue
+        dest[i] = src[j += 1]
     end
-    stepval = (max-min)/(len-1)
-    if stepval ≈ round(stepval)
-        return Int(min):round(Int,stepval):Int(max)
-    end
-    startstopsteplen(min, max, stepval, len)
-end
-
-function startstoplen(min, max, len)
-    if max-min ≈ len-1
-        return min:max
-    end
-    stepval = (max-min)/(len-1)
-    startstopsteplen(min, max, stepval, len)
-end
-
-function startsteplen(min, stepval, len)
-    max = min+stepval*(len-1)
-    startstoplen(min, max, len)
-end
-
-function startstepstop(min, stepval, max)
-    n = (max-min)/stepval + 1
-    len = floor(Int, n+10*eps(n))
-    startstopsteplen(min, max, stepval, len)
-end
-
-function startstopsteplen(min::T, max::T, stepval::T, len) where T<:Integer
-    stepval == 1 ? (min:max) : (min:stepval:max)
-end
-function startstopsteplen(min::T, max::T, stepval::T, len) where T<:AbstractFloat
-    imin, imax, istepval = round(Int, min), round(Int, max), round(Int, stepval)
-    if min ≈ imin && max ≈ imax && stepval ≈ istepval
-        return startstopsteplen(imin, imax, istepval, len)
-    end
-    r = range(min, stop=max, length=len)
-    abs(step(r)/stepval - 1) < 0.01 || error("wanted length $len from $min to $max, got $r of length $(length(r))")
-    r
-end
-function startstopsteplen(min::T, max::T, stepval::T, len) where T
-    r = range(min, stop=max, length=len)
-    abs(step(r)/stepval - 1) < 0.01 || error("wanted length $len from $min to $max, got $r of length $(length(r))")
-    r
-end
-startstopsteplen(min, max, stepval, len) = startstopsteplen(promote(min, max, stepval)..., len)
-
-function copy_space!(dest, src, isspace)
-    length(src) == sum(isspace) || throw(DimensionMismatch("src length $(length(src)) disagrees with isspace $isspace"))
-    length(dest) == length(isspace) || throw(DimensionMismatch("dest length $(length(dest)) does not agree with isspace of length $(length(isspace))"))
-    d = 1
-    for ds = 1:length(src)
-        while !isspace[d]
-            d += 1
-        end
-        dest[d] = src[ds]
-        d += 1
-    end
-    dest
-end
-
-function copy_not_nan!(dest, src)
-    nd = length(dest)
-    length(src) == nd || throw(DimensionMismatch("dest length $nd does not match source length $(length(src))"))
-    for d = 1:nd
-        s = src[d]
-        if !isa(s, AbstractFloat) || !isnan(s)
-            dest[d] = s
-        end
-    end
-    dest
+    return dest
 end
 
 function spacings(spacedirections)
