@@ -1,7 +1,7 @@
 name = "NRRD"
 uuid = "9bb6cfbd-7763-5393-b1b5-1c8e09872146"
 authors = ["Tim Holy <tim.holy@gmail.com>"]
-version = "0.6.4"
+version = "0.6.5"
 
 [deps]
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
@@ -18,8 +18,8 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 CodecZlib = "0.6, 0.7"
 FileIO = "1"
 ImageAxes = "0.6"
-ImageCore = "0.9"
-Quaternions = "0.4"
+ImageCore = "0.9, 0.10"
+Quaternions = "0.4, 0.7"
 StaticArrays = "0.11, 0.12, 1"
 Unitful = "0.14, 0.15, 0.16, 0.17, 0.18, 1"
 julia = "1"
